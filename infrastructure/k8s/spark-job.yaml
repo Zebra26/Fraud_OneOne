@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fraud-spark-features
+spec:
+  schedule: "0 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: spark-job
+              image: bitnami/spark:3.5
+              imagePullPolicy: IfNotPresent
+              args:
+                - "/opt/bitnami/spark/bin/spark-submit"
+                - "--master"
+                - "local"
+                - "/opt/jobs/compute_features.py"
+              env:
+                - name: KAFKA_BOOTSTRAP_SERVERS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: fraud-app-config
+                      key: kafka-brokers
+                - name: MONGO_URI
+                  valueFrom:
+                    secretKeyRef:
+                      name: fraud-app-secrets
+                      key: mongo-uri
+                - name: XAI_CONTEXT
+                  value: "Explicabilité (XAI) : Approche SHAP pour justifier les décisions et garantir la conformité réglementaire (ex: AI Act)."
+

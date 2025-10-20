@@ -1,0 +1,988 @@
+name: infrastructure
+services:
+  backend:
+    build:
+      context: C:\Users\ibrahimiz\Desktop\Fraud_K\backend
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - api.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    depends_on:
+      kafka-1:
+        condition: service_started
+        required: true
+      kafka-2:
+        condition: service_started
+        required: true
+      kafka-3:
+        condition: service_started
+        required: true
+      mongo-router:
+        condition: service_started
+        required: true
+      redis-cluster:
+        condition: service_started
+        required: true
+    environment:
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      EXPLAINER_BACKGROUND_SIZE: "100"
+      FEATURE_STORE_URI: redis+cluster://redis-cluster:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC_FEATURES: transactions.features
+      KAFKA_TOPIC_PREDICTIONS: predictions
+      KAFKA_TOPIC_TRANSACTIONS: transactions
+      MODEL_DIR: /app/models
+      MODEL_PATH: /app/models/ensemble_detector.joblib
+      MONGO_DB: fraud_db
+      MONGO_URI: mongodb://fraud_app:fraudAppPass@mongo-router:27017/fraud?authSource=admin&retryWrites=true&w=majority
+      OPTIMAL_THRESHOLD_PATH: /app/models/optimal_threshold.txt
+      PROMETHEUS_ENDPOINT: http://monitoring:9090
+      REDIS_CLUSTER_NODES: redis-cluster:6379,redis-cluster:6380,redis-cluster:6381
+      REDIS_PASSWORD: redisStrongPass
+      REDIS_USE_SSL: "false"
+      THRESHOLD_BLOCK: "0.9"
+      THRESHOLD_REVIEW: "0.7"
+    image: fraud-backend:latest
+    networks:
+      app-net: null
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 8000
+        published: "8000"
+        protocol: tcp
+  feature-engineering:
+    build:
+      context: C:\Users\ibrahimiz\Desktop\Fraud_K\services\spark
+      dockerfile: Dockerfile
+    depends_on:
+      kafka-1:
+        condition: service_started
+        required: true
+      kafka-2:
+        condition: service_started
+        required: true
+      kafka-3:
+        condition: service_started
+        required: true
+      minio1:
+        condition: service_started
+        required: true
+      spark-master:
+        condition: service_started
+        required: true
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_ENDPOINT: http://minio1:9000
+      MINIO_SECRET_KEY: minioadmin123
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_RPC_AUTHENTICATION_SECRET: sparkSecret
+    networks:
+      analytics-net: null
+      data-net: null
+    volumes:
+      - type: volume
+        source: spark-checkpoints
+        target: /opt/checkpoints
+        volume: {}
+  kafka-1:
+    depends_on:
+      zookeeper-1:
+        condition: service_started
+        required: true
+      zookeeper-2:
+        condition: service_started
+        required: true
+      zookeeper-3:
+        condition: service_started
+        required: true
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9092,EXTERNAL://localhost:19092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_BROKER_ID: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093
+      KAFKA_MESSAGE_MAX_BYTES: "15728640"
+      KAFKA_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_REPLICA_FETCH_MAX_BYTES: "15728640"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+    hostname: kafka-1
+    image: confluentinc/cp-kafka:7.5.0
+    networks:
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 9093
+        published: "19092"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: kafka1_data
+        target: /var/lib/kafka/data
+        volume: {}
+  kafka-2:
+    depends_on:
+      zookeeper-1:
+        condition: service_started
+        required: true
+      zookeeper-2:
+        condition: service_started
+        required: true
+      zookeeper-3:
+        condition: service_started
+        required: true
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9092,EXTERNAL://localhost:19093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_BROKER_ID: "2"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093
+      KAFKA_MESSAGE_MAX_BYTES: "15728640"
+      KAFKA_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_REPLICA_FETCH_MAX_BYTES: "15728640"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+    hostname: kafka-2
+    image: confluentinc/cp-kafka:7.5.0
+    networks:
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 9093
+        published: "19093"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: kafka2_data
+        target: /var/lib/kafka/data
+        volume: {}
+  kafka-3:
+    depends_on:
+      zookeeper-1:
+        condition: service_started
+        required: true
+      zookeeper-2:
+        condition: service_started
+        required: true
+      zookeeper-3:
+        condition: service_started
+        required: true
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9092,EXTERNAL://localhost:19094
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_BROKER_ID: "3"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093
+      KAFKA_MESSAGE_MAX_BYTES: "15728640"
+      KAFKA_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_REPLICA_FETCH_MAX_BYTES: "15728640"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+    hostname: kafka-3
+    image: confluentinc/cp-kafka:7.5.0
+    networks:
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 9093
+        published: "19094"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: kafka3_data
+        target: /var/lib/kafka/data
+        volume: {}
+  kafka-ui:
+    depends_on:
+      kafka-1:
+        condition: service_started
+        required: true
+      kafka-2:
+        condition: service_started
+        required: true
+      kafka-3:
+        condition: service_started
+        required: true
+    environment:
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_CLUSTERS_0_NAME: fraud-cluster
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+    image: provectuslabs/kafka-ui:latest
+    networks:
+      app-net: null
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 8080
+        published: "8080"
+        protocol: tcp
+  minio1:
+    command:
+      - server
+      - --console-address
+      - :9001
+      - http://minio1/data
+      - http://minio2/data
+      - http://minio3/data
+      - http://minio4/data
+    environment:
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: minioadmin
+    hostname: minio1
+    image: minio/minio:RELEASE.2024-02-17T01-15-28Z
+    networks:
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 9000
+        published: "9000"
+        protocol: tcp
+      - mode: ingress
+        target: 9001
+        published: "9001"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: minio1_data
+        target: /data
+        volume: {}
+  minio2:
+    command:
+      - server
+      - http://minio1/data
+      - http://minio2/data
+      - http://minio3/data
+      - http://minio4/data
+    environment:
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: minioadmin
+    hostname: minio2
+    image: minio/minio:RELEASE.2024-02-17T01-15-28Z
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: minio2_data
+        target: /data
+        volume: {}
+  minio3:
+    command:
+      - server
+      - http://minio1/data
+      - http://minio2/data
+      - http://minio3/data
+      - http://minio4/data
+    environment:
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: minioadmin
+    hostname: minio3
+    image: minio/minio:RELEASE.2024-02-17T01-15-28Z
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: minio3_data
+        target: /data
+        volume: {}
+  minio4:
+    command:
+      - server
+      - http://minio1/data
+      - http://minio2/data
+      - http://minio3/data
+      - http://minio4/data
+    environment:
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: minioadmin
+    hostname: minio4
+    image: minio/minio:RELEASE.2024-02-17T01-15-28Z
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: minio4_data
+        target: /data
+        volume: {}
+  ml-inference:
+    build:
+      context: C:\Users\ibrahimiz\Desktop\Fraud_K\services\ml-inference
+      dockerfile: Dockerfile
+    depends_on:
+      kafka-1:
+        condition: service_started
+        required: true
+      kafka-2:
+        condition: service_started
+        required: true
+      kafka-3:
+        condition: service_started
+        required: true
+      mongo-router:
+        condition: service_started
+        required: true
+      redis-cluster:
+        condition: service_started
+        required: true
+      spark-master:
+        condition: service_started
+        required: true
+    environment:
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      EXPLAINER_BACKGROUND_SIZE: "100"
+      FEATURE_STORE_URI: redis+cluster://redis-cluster:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC_FEATURES: transactions.features
+      KAFKA_TOPIC_PREDICTIONS: predictions
+      KAFKA_TOPIC_TRANSACTIONS: transactions
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_ENDPOINT: http://minio1:9000
+      MINIO_SECRET_KEY: minioadmin123
+      MODEL_DIR: /app/models
+      MODEL_PATH: /app/models/ensemble_detector.joblib
+      MONGO_DB: fraud_db
+      MONGO_URI: mongodb://fraud_app:fraudAppPass@mongo-router:27017/fraud?authSource=admin&retryWrites=true&w=majority
+      OPTIMAL_THRESHOLD_PATH: /app/models/optimal_threshold.txt
+      PROMETHEUS_ENDPOINT: http://monitoring:9090
+      REDIS_CLUSTER_NODES: redis-cluster:6379,redis-cluster:6380,redis-cluster:6381
+      REDIS_PASSWORD: redisStrongPass
+      REDIS_USE_SSL: "false"
+      THRESHOLD_BLOCK: "0.9"
+      THRESHOLD_REVIEW: "0.7"
+    image: fraud-ml-inference:latest
+    networks:
+      analytics-net: null
+      app-net: null
+      data-net: null
+    volumes:
+      - type: volume
+        source: models_data
+        target: /app/models
+        volume: {}
+  mongo-config-1:
+    command:
+      - mongod
+      - --configsvr
+      - --replSet
+      - configReplSet
+      - --bind_ip_all
+      - --port
+      - "27017"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-config-1
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_config_1
+        target: /data/configdb
+        volume: {}
+  mongo-config-2:
+    command:
+      - mongod
+      - --configsvr
+      - --replSet
+      - configReplSet
+      - --bind_ip_all
+      - --port
+      - "27017"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-config-2
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_config_2
+        target: /data/configdb
+        volume: {}
+  mongo-config-3:
+    command:
+      - mongod
+      - --configsvr
+      - --replSet
+      - configReplSet
+      - --bind_ip_all
+      - --port
+      - "27017"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-config-3
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_config_3
+        target: /data/configdb
+        volume: {}
+  mongo-keyfile-setup:
+    command:
+      - set
+      - -euo
+      - pipefail
+      - umask
+      - "177"
+      - echo
+      - fraud_mongo_cluster_key_ChangeMe
+    entrypoint:
+      - /bin/sh
+      - -c
+    environment:
+      MONGO_CLUSTER_KEY: fraud_mongo_cluster_key_ChangeMe
+    image: alpine:3.19
+    networks:
+      data-net: null
+    restart: "no"
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /keyfile
+        volume: {}
+  mongo-router:
+    command:
+      - mongos
+      - --configdb
+      - configReplSet/mongo-config-1:27017,mongo-config-2:27017,mongo-config-3:27017
+      - --bind_ip_all
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+      - --port
+      - "27017"
+    depends_on:
+      mongo-config-1:
+        condition: service_started
+        required: true
+      mongo-config-2:
+        condition: service_started
+        required: true
+      mongo-config-3:
+        condition: service_started
+        required: true
+      mongo-shard1-1:
+        condition: service_started
+        required: true
+      mongo-shard2-1:
+        condition: service_started
+        required: true
+    hostname: mongo-router
+    image: mongo:6
+    networks:
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 27017
+        published: "27017"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+  mongo-setup:
+    command:
+      - sleep
+      - "15"
+    depends_on:
+      mongo-router:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /bin/sh
+      - -c
+    image: mongo:6
+    networks:
+      data-net: null
+    restart: "no"
+  mongo-shard1-1:
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - shard1ReplSet
+      - --bind_ip_all
+      - --port
+      - "27018"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-shard1-1
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_shard1_1
+        target: /data/db
+        volume: {}
+  mongo-shard1-2:
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - shard1ReplSet
+      - --bind_ip_all
+      - --port
+      - "27018"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-shard1-2
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_shard1_2
+        target: /data/db
+        volume: {}
+  mongo-shard1-3:
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - shard1ReplSet
+      - --bind_ip_all
+      - --port
+      - "27018"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-shard1-3
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_shard1_3
+        target: /data/db
+        volume: {}
+  mongo-shard2-1:
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - shard2ReplSet
+      - --bind_ip_all
+      - --port
+      - "27019"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-shard2-1
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_shard2_1
+        target: /data/db
+        volume: {}
+  mongo-shard2-2:
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - shard2ReplSet
+      - --bind_ip_all
+      - --port
+      - "27019"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-shard2-2
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_shard2_2
+        target: /data/db
+        volume: {}
+  mongo-shard2-3:
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - shard2ReplSet
+      - --bind_ip_all
+      - --port
+      - "27019"
+      - --keyFile
+      - /run/secrets/mongo-keyfile
+    depends_on:
+      mongo-keyfile-setup:
+        condition: service_completed_successfully
+        required: true
+    hostname: mongo-shard2-3
+    image: mongo:6
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: mongo_keyfile
+        target: /run/secrets
+        volume: {}
+      - type: volume
+        source: mongo_shard2_3
+        target: /data/db
+        volume: {}
+  redis-cluster:
+    image: bitnami/redis-cluster:${REDIS_CLUSTER_TAG:-latest}
+    hostname: redis-cluster
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_CLUSTER_REPLICAS=1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redisStrongPass}
+    ports:
+      - "6379:6379"
+      - "6380:6380"
+      - "6381:6381"
+      - "6382:6382"
+      - "6383:6383"
+      - "6384:6384"
+    volumes:
+      - redis_cluster_data:/bitnami
+    networks:
+      data-net: null
+
+  redisinsight:
+    depends_on:
+      redis-cluster:
+        condition: service_started
+        required: true
+    environment:
+      REDISINSIGHT_ACCEPT_LICENSE: "yes"
+      REDISINSIGHT_ADMIN_EMAIL: admin@fraud.local
+      REDISINSIGHT_ADMIN_PASSWORD: StrongPassword!23
+      RIHOST: 0.0.0.0
+    hostname: redisinsight
+    image: redis/redisinsight:latest
+    networks:
+      app-net: null
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 5540
+        published: "8001"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: redisinsight_data
+        target: /data
+        volume: {}
+  spark-master:
+    environment:
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "yes"
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "yes"
+      SPARK_RPC_AUTHENTICATION_SECRET: sparkSecret
+      SPARK_RPC_ENCRYPTION_ENABLED: "yes"
+      SPARK_SSL_ENABLED: "no"
+    hostname: spark-master
+    image: bitnami/spark:3.5
+    networks:
+      analytics-net: null
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 7077
+        published: "7077"
+        protocol: tcp
+      - mode: ingress
+        target: 8080
+        published: "8081"
+        protocol: tcp
+  spark-worker-1:
+    depends_on:
+      spark-master:
+        condition: service_started
+        required: true
+    environment:
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "yes"
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_MODE: worker
+      SPARK_RPC_AUTHENTICATION_ENABLED: "yes"
+      SPARK_RPC_AUTHENTICATION_SECRET: sparkSecret
+      SPARK_RPC_ENCRYPTION_ENABLED: "yes"
+      SPARK_WORKER_CORES: "2"
+      SPARK_WORKER_MEMORY: 4G
+    hostname: spark-worker-1
+    image: bitnami/spark:3.5
+    networks:
+      analytics-net: null
+      data-net: null
+  spark-worker-2:
+    depends_on:
+      spark-master:
+        condition: service_started
+        required: true
+    environment:
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "yes"
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_MODE: worker
+      SPARK_RPC_AUTHENTICATION_ENABLED: "yes"
+      SPARK_RPC_AUTHENTICATION_SECRET: sparkSecret
+      SPARK_RPC_ENCRYPTION_ENABLED: "yes"
+      SPARK_WORKER_CORES: "2"
+      SPARK_WORKER_MEMORY: 4G
+    hostname: spark-worker-2
+    image: bitnami/spark:3.5
+    networks:
+      analytics-net: null
+      data-net: null
+  trainer:
+    build:
+      context: C:\Users\ibrahimiz\Desktop\Fraud_K\services\trainer
+      dockerfile: Dockerfile
+    depends_on:
+      kafka-1:
+        condition: service_started
+        required: true
+      kafka-2:
+        condition: service_started
+        required: true
+      kafka-3:
+        condition: service_started
+        required: true
+      minio1:
+        condition: service_started
+        required: true
+      mongo-router:
+        condition: service_started
+        required: true
+      redis-cluster:
+        condition: service_started
+        required: true
+    environment:
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      EXPLAINER_BACKGROUND_SIZE: "100"
+      FEATURE_STORE_URI: redis+cluster://redis-cluster:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC_FEATURES: transactions.features
+      KAFKA_TOPIC_PREDICTIONS: predictions
+      KAFKA_TOPIC_TRANSACTIONS: transactions
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_ENDPOINT: http://minio1:9000
+      MINIO_SECRET_KEY: minioadmin123
+      MODEL_DIR: /workspace/models
+      MODEL_PATH: /workspace/models/ensemble_detector.joblib
+      MONGO_DB: fraud_db
+      MONGO_URI: mongodb://fraud_app:fraudAppPass@mongo-router:27017/fraud?authSource=admin&retryWrites=true&w=majority
+      OPTIMAL_THRESHOLD_PATH: /workspace/models/optimal_threshold.txt
+      PROMETHEUS_ENDPOINT: http://monitoring:9090
+      REDIS_CLUSTER_NODES: redis-cluster:6379,redis-cluster:6380,redis-cluster:6381
+      REDIS_PASSWORD: redisStrongPass
+      REDIS_USE_SSL: "false"
+      THRESHOLD_BLOCK: "0.9"
+      THRESHOLD_REVIEW: "0.7"
+    image: fraud-trainer:latest
+    networks:
+      analytics-net: null
+      app-net: null
+      data-net: null
+    volumes:
+      - type: volume
+        source: models_data
+        target: /workspace/models
+        volume: {}
+  zookeeper-1:
+    environment:
+      ZOOKEEPER_CLIENT_PORT: "2181"
+      ZOOKEEPER_INIT_LIMIT: "5"
+      ZOOKEEPER_SERVER_ID: "1"
+      ZOOKEEPER_SERVERS: zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888
+      ZOOKEEPER_SYNC_LIMIT: "2"
+      ZOOKEEPER_TICK_TIME: "2000"
+    hostname: zookeeper-1
+    image: confluentinc/cp-zookeeper:7.5.0
+    networks:
+      data-net: null
+    ports:
+      - mode: ingress
+        target: 2181
+        published: "12181"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: zookeeper1_data
+        target: /var/lib/zookeeper/data
+        volume: {}
+  zookeeper-2:
+    environment:
+      ZOOKEEPER_CLIENT_PORT: "2181"
+      ZOOKEEPER_INIT_LIMIT: "5"
+      ZOOKEEPER_SERVER_ID: "2"
+      ZOOKEEPER_SERVERS: zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888
+      ZOOKEEPER_SYNC_LIMIT: "2"
+      ZOOKEEPER_TICK_TIME: "2000"
+    hostname: zookeeper-2
+    image: confluentinc/cp-zookeeper:7.5.0
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: zookeeper2_data
+        target: /var/lib/zookeeper/data
+        volume: {}
+  zookeeper-3:
+    environment:
+      ZOOKEEPER_CLIENT_PORT: "2181"
+      ZOOKEEPER_INIT_LIMIT: "5"
+      ZOOKEEPER_SERVER_ID: "3"
+      ZOOKEEPER_SERVERS: zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888
+      ZOOKEEPER_SYNC_LIMIT: "2"
+      ZOOKEEPER_TICK_TIME: "2000"
+    hostname: zookeeper-3
+    image: confluentinc/cp-zookeeper:7.5.0
+    networks:
+      data-net: null
+    volumes:
+      - type: volume
+        source: zookeeper3_data
+        target: /var/lib/zookeeper/data
+        volume: {}
+networks:
+  analytics-net:
+    name: infrastructure_analytics-net
+  app-net:
+    name: infrastructure_app-net
+  data-net:
+    name: infrastructure_data-net
+volumes:
+  kafka1_data:
+    name: infrastructure_kafka1_data
+  kafka2_data:
+    name: infrastructure_kafka2_data
+  kafka3_data:
+    name: infrastructure_kafka3_data
+  minio1_data:
+    name: infrastructure_minio1_data
+  minio2_data:
+    name: infrastructure_minio2_data
+  minio3_data:
+    name: infrastructure_minio3_data
+  minio4_data:
+    name: infrastructure_minio4_data
+  models_data:
+    name: infrastructure_models_data
+  mongo_config_1:
+    name: infrastructure_mongo_config_1
+  mongo_config_2:
+    name: infrastructure_mongo_config_2
+  mongo_config_3:
+    name: infrastructure_mongo_config_3
+  mongo_keyfile:
+    name: infrastructure_mongo_keyfile
+  mongo_shard1_1:
+    name: infrastructure_mongo_shard1_1
+  mongo_shard1_2:
+    name: infrastructure_mongo_shard1_2
+  mongo_shard1_3:
+    name: infrastructure_mongo_shard1_3
+  mongo_shard2_1:
+    name: infrastructure_mongo_shard2_1
+  mongo_shard2_2:
+    name: infrastructure_mongo_shard2_2
+  mongo_shard2_3:
+    name: infrastructure_mongo_shard2_3
+  redis_cluster_data:
+    name: infrastructure_redis_cluster_data
+  redisinsight_data:
+    name: infrastructure_redisinsight_data
+  spark-checkpoints:
+    name: infrastructure_spark-checkpoints
+  zookeeper1_data:
+    name: infrastructure_zookeeper1_data
+  zookeeper2_data:
+    name: infrastructure_zookeeper2_data
+  zookeeper3_data:
+    name: infrastructure_zookeeper3_data

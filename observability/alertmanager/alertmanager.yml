@@ -1,0 +1,55 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default-webhook
+  group_by: ['service', 'severity']
+  group_wait: 10s
+  group_interval: 2m
+  repeat_interval: 2h
+  routes:
+    - matchers:
+        - severity = critical
+      receiver: critical-webhook
+    - matchers:
+        - severity = warning
+      receiver: warning-webhook
+    - matchers: [ 'alertname = MongoBatchDrops' ]
+      receiver: slack
+    - matchers: [ 'alertname = RedisBatchDrops' ]
+      receiver: slack
+    - matchers: [ 'alertname = MongoBatchQueueHigh' ]
+      receiver: slack
+    - matchers: [ 'alertname = RedisBatchQueueHigh' ]
+      receiver: slack
+
+inhibit_rules:
+  # Inhibit warnings if a critical alert for the same service is active
+  - source_matchers: [ 'severity = critical' ]
+    target_matchers: [ 'severity = warning' ]
+    equal: [ 'service' ]
+
+receivers:
+  - name: default-webhook
+    webhook_configs:
+      - url: 'http://alert-webhook:9000/alert'
+        send_resolved: true
+
+  - name: critical-webhook
+    webhook_configs:
+      - url: 'http://alert-webhook:9000/critical'
+        send_resolved: true
+
+  - name: warning-webhook
+    webhook_configs:
+      - url: 'http://alert-webhook:9000/warning'
+        send_resolved: true
+
+  - name: slack
+    slack_configs:
+      - send_resolved: true
+        api_url_file: /etc/alertmanager/slack_webhook
+        channel: "#fraud-alerts"
+
+# Examples for Slack / MS Teams (uncomment and configure)
+# To configure Slack, create a file 'observability/alertmanager/slack_webhook' containing the webhook URL.

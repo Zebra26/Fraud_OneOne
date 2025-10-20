@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-ml-inference
+  labels:
+    app: fraud-ml-inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fraud-ml-inference
+  template:
+    metadata:
+      labels:
+        app: fraud-ml-inference
+    spec:
+      containers:
+        - name: ml-inference
+          image: fraud-ml-inference:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: fraud-app-config
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          env:
+            - name: XAI_NOTE
+              value: "Explicabilité (XAI) : Approche SHAP pour justifier les décisions et garantir la conformité réglementaire (ex: AI Act)."
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-ml-inference
+spec:
+  selector:
+    app: fraud-ml-inference
+  ports:
+    - port: 8080
+      targetPort: 8080
+

@@ -1,0 +1,36 @@
+{
+  "model_version": "2.0.0",
+  "algorithm": "LogisticRegression",
+  "feature_names": [
+    "transaction_amount",
+    "transaction_time_seconds",
+    "is_weekend",
+    "hour_of_day",
+    "location_risk_score",
+    "transaction_frequency_30min",
+    "login_ip_changed_last_hour",
+    "avg_transaction_amount_24h",
+    "time_since_last_tx",
+    "ip_risk_score",
+    "vpn_detected",
+    "transactions_last_24h",
+    "is_round_amount",
+    "unique_receivers_24h"
+  ],
+  "metrics": {
+    "auc": 0.9892173266406395,
+    "samples": 500
+  },
+  "thresholds": {
+    "review": 0.6,
+    "block": 0.85
+  },
+  "weights": {
+    "tabular": 0.7,
+    "graph": 0.1,
+    "autoencoder": 0.15,
+    "lstm": 0.05
+  },
+  "artifact_hash": "00723d84d1ee7ef3da5ba9193125a759c67e5c235c92a536f11ce1115212fcfe",
+  "optimal_threshold": 0.7
+}

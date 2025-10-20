@@ -1,0 +1,12 @@
+{
+  "title": "Fraud Scores & Drift",
+  "schemaVersion": 39,
+  "panels": [
+    {"type": "timeseries", "title": "Drift Alerts", "datasource": {"type": "prometheus", "uid": "Prometheus"},
+     "targets": [{"expr": "increase(drift_alerts_total[15m])"}]},
+    {"type": "timeseries", "title": "PSI per feature", "datasource": {"type": "prometheus", "uid": "Prometheus"},
+     "targets": [{"expr": "{__name__=~\\\"psi_feature_.*\\\"}"}]},
+    {"type": "logs", "title": "Anomalies (Loki)", "datasource": {"type": "loki", "uid": "Loki"},
+     "targets": [{"expr": "{job=\\\"docker\\\"} |= \\\"anomaly\\\""}]}
+  ]
+}

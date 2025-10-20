@@ -1,0 +1,21 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: app-backend-allow-metrics-l7
+  namespace: app
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/metrics"

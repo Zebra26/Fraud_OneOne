@@ -1,0 +1,64 @@
+services:
+  backend:
+    image: fraud-backend:prod
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      ENABLE_TLS: "true"
+      ENABLE_MTLS: "true"
+      MONGO_SSL: "true"
+      MONGO_TLS_CA_PATH: /app/security/certs/ca.crt
+      REDIS_USE_SSL: "true"
+      TLS_CERT_PATH: /app/security/certs/server.crt
+      TLS_KEY_PATH: /app/security/certs/server.key
+      TLS_CA_PATH: /app/security/certs/ca.crt
+    volumes:
+      - ./security/certs:/app/security/certs:ro
+    depends_on:
+      - ml-inference
+
+  ml-inference:
+    image: fraud-ml-inference:prod
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      ENABLE_TLS: "true"
+      ENABLE_MTLS: "true"
+      TLS_CERT_PATH: /app/security/certs/server.crt
+      TLS_KEY_PATH: /app/security/certs/server.key
+      TLS_CA_PATH: /app/security/certs/ca.crt
+    volumes:
+      - ./security/certs:/app/security/certs:ro
+
+  trainer:
+    image: fraud-trainer:prod
+    env_file:
+      - .env
+    environment:
+      MLFLOW_TRACKING_URI: https://mlflow:5000
+      ENABLE_TLS: "true"
+      TLS_CA_PATH: /workspace/security/certs/ca.crt
+    volumes:
+      - ./security/certs:/workspace/security/certs:ro
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    environment:
+      BACKEND_STORE_URI: sqlite:///mlruns/mlflow.db
+    command: ["mlflow", "ui", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "sqlite:///mlruns/mlflow.db", "--default-artifact-root", "file:/mlruns"]
+    volumes:
+      - ./mlruns:/mlruns
+    # For TLS in front of MLflow, deploy behind an ingress/proxy terminating TLS (recommended).
+
+  redis-cluster:
+    # In production, use a managed Redis/Valkey Cluster with TLS; this is a placeholder.
+    image: grokzen/redis-cluster:latest
+
+  mongo:
+    image: mongo:6
+
+networks:
+  default:
+    driver: bridge

@@ -1,0 +1,86 @@
+{
+  "info": {
+    "name": "Fraud_K Realtime API",
+    "_postman_id": "c6a9d3df-4f75-4f9d-9d0c-rediscluster",
+    "description": "Postman collection to exercise the Fraud_K realtime API against the Redis Cluster-enabled stack.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/admin/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "health"]
+        }
+      }
+    },
+    {
+      "name": "Root Metadata",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/",
+          "host": ["{{baseUrl}}"],
+          "path": [""]
+        }
+      }
+    },
+    {
+      "name": "Transactions > Ingest transaction",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transaction_id\": \"txn_demo_001\",\n  \"timestamp\": \"{{transactionTimestamp}}\",\n  \"features\": {\n    \"amount\": 199.5,\n    \"velocity\": 0.42,\n    \"is_night\": 1,\n    \"country_risk\": 0.32,\n    \"new_device\": 1,\n    \"behavior_deviation\": 0.18\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/transactions/ingest",
+          "host": ["{{baseUrl}}"],
+          "path": ["transactions", "ingest"]
+        }
+      }
+    },
+    {
+      "name": "Predictions > Score transaction",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transaction_id\": \"txn_demo_001\",\n  \"features\": {\n    \"amount\": 199.5,\n    \"velocity\": 0.42,\n    \"is_night\": 1,\n    \"country_risk\": 0.32,\n    \"new_device\": 1,\n    \"behavior_deviation\": 0.18\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/predictions/score",
+          "host": ["{{baseUrl}}"],
+          "path": ["predictions", "score"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "transactionTimestamp",
+      "value": "2025-10-09T15:30:00Z"
+    }
+  ]
+}

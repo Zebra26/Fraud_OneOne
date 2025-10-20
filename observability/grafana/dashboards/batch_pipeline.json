@@ -1,0 +1,31 @@
+{
+  "title": "Batch Pipeline & Worker",
+  "schemaVersion": 39,
+  "panels": [
+    {"type":"timeseries","title":"Mongo Batch Flushes/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(mongo_batch_flushes_total[5m])"}]},
+    {"type":"timeseries","title":"Mongo Batch Items/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(mongo_batch_items_total[5m])"}]},
+    {"type":"timeseries","title":"Mongo Batch Drops/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(mongo_batch_dropped_total[5m])"}]},
+    {"type":"timeseries","title":"Mongo Batch Queue Depth","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"mongo_batch_queue_depth"}]},
+
+    {"type":"timeseries","title":"Redis Batch Flushes/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(redis_batch_flushes_total[5m])"}]},
+    {"type":"timeseries","title":"Redis Batch Items/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(redis_batch_items_total[5m])"}]},
+    {"type":"timeseries","title":"Redis Batch Drops/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(redis_batch_dropped_total[5m])"}]},
+    {"type":"timeseries","title":"Redis Batch Queue Depth","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"redis_batch_queue_depth"}]},
+
+    {"type":"timeseries","title":"Worker Consumed msgs/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(kafka_consumer_messages_total[5m])"}]},
+    {"type":"timeseries","title":"Worker Batches/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(kafka_consumer_batches_total[5m])"}]},
+    {"type":"timeseries","title":"Producer msgs/s","datasource":{"type":"prometheus","uid":"Prometheus"},
+     "targets":[{"expr":"rate(kafka_producer_messages_total[5m])"}]}
+  ]
+}
+

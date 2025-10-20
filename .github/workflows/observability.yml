@@ -1,0 +1,100 @@
+name: Validate Observability
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prepare .env for services
+        run: |
+          echo "APP_ENV=development" > .env
+          echo "ENABLE_TLS=false" >> .env
+          echo "ENABLE_MTLS=false" >> .env
+          echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> .env
+          echo "API_HMAC_KEY=${{ secrets.API_HMAC_KEY }}" >> .env
+          echo "REDIS_CLUSTER_NODES=redis-cluster:7000,redis-cluster:7001,redis-cluster:7002" >> .env
+          echo "REDIS_USE_SSL=false" >> .env
+
+      - name: Start services (dev + obs overlay)
+        run: |
+          docker compose -f docker-compose.dev.yml -f docker-compose.observability.yml -f docker-compose.observability.dev.yml up -d backend ml-inference prometheus grafana loki promtail
+          # basic wait
+          sleep 20
+          docker ps -a
+
+      - name: Validate Observability
+        env:
+          BACKEND_URL: http://localhost:8000
+          INFERENCE_URL: http://localhost:8080
+          PROMETHEUS_URL: http://localhost:9090
+          LOKI_URL: http://localhost:3100
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          API_HMAC_KEY: ${{ secrets.API_HMAC_KEY }}
+        run: |
+          python scripts/validate_observability.py --output json --output-file observability_report.json
+
+      - name: Chaos Test (load shedding)
+        env:
+          BACKEND_URL: http://localhost:8000
+        run: |
+          python scripts/chaos_test.py
+
+      - name: Install k6
+        if: runner.os == 'Linux'
+        run: |
+          curl -sSL https://github.com/grafana/k6/releases/download/v0.48.0/k6-v0.48.0-linux-amd64.deb -L -o k6.deb
+          sudo dpkg -i k6.deb
+
+      - name: Run k6 smoke test
+        if: runner.os == 'Linux'
+        run: |
+          echo 'import http from "k6/http"; export default function(){ http.get("http://localhost:8000/admin/health"); }' > k6.js
+          k6 run --vus 5 --duration 10s k6.js
+
+      - name: Finalize report
+        run: make finalize-report
+
+      - name: Upload final validation summary
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: fraud_one_validation_summary
+          path: fraud_one_validation_summary.json
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: observability-report
+          path: observability_report.json
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.dev.yml -f docker-compose.observability.yml -f docker-compose.observability.dev.yml logs --no-color > docker-logs.txt || true
+        continue-on-error: true
+
+      - name: Upload logs artifact on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: docker-logs.txt

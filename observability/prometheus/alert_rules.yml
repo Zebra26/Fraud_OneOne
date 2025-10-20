@@ -1,0 +1,211 @@
+groups:
+  - name: slo_security.rules
+    rules:
+      # High latency for backend based on request_latency_ms histogram (ms)
+      - alert: BackendHighLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(request_latency_ms_bucket[5m])) by (le)) > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "Backend p95 latency > 60ms"
+          description: "p95 latency above 60ms for 5m"
+
+      # High latency for inference based on infer_request_latency_ms histogram (ms)
+      - alert: InferenceHighLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(infer_request_latency_ms_bucket[5m])) by (le)) > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "Inference p95 latency > 60ms"
+          description: "p95 latency above 60ms for 5m"
+
+      # Error spikes from generic requests_total (if present)
+      - alert: ErrorsSpikeGeneric
+        expr: rate(requests_total{status=~"5.."}[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: any
+        annotations:
+          summary: "5xx error rate > 5 req/min"
+          description: "Generic requests_total shows 5xx spike"
+
+      # Error spikes per service (backend/inference specific counters)
+      - alert: BackendErrorsSpike
+        expr: increase(fraud_backend_requests_total{status=~"5.."}[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Backend 5xx errors > 5 in 5m"
+          description: "Backend 5xx errors exceeded threshold"
+
+      - alert: InferenceErrorsSpike
+        expr: increase(fraud_inference_requests_total{status=~"5.."}[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: inference
+        annotations:
+          summary: "Inference 5xx errors > 5 in 5m"
+          description: "Inference 5xx errors exceeded threshold"
+
+      # Auth failures (supports both generic and service-specific counters)
+      - alert: AuthFailures
+        expr: |
+          increase(auth_failures_total[5m]) > 0
+          or increase(jwt_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: any
+        annotations:
+          summary: "Authentication failures detected"
+          description: "JWT/HMAC auth failures observed in last 5m"
+
+      # Model integrity/signature/decrypt failures (if exported)
+      - alert: ModelIntegrityFailure
+        expr: |
+          increase(model_integrity_failures_total[5m]) > 0
+          or increase(model_signature_failures_total[5m]) > 0
+          or increase(model_decrypt_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: inference
+        annotations:
+          summary: "Model integrity/signature/decrypt failure"
+          description: "One or more model integrity checks failed"
+
+      # Safe mode activated
+      - alert: SafeModeActive
+        expr: safe_mode_state == 1
+        for: 1m
+        labels:
+          severity: critical
+          service: inference
+        annotations:
+          summary: "Safe mode is active"
+          description: "Service entered safe mode"
+
+      # Drift alerts (if implemented)
+      - alert: DriftAlert
+        expr: increase(drift_alerts_total[15m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "Model/data drift alert"
+          description: "Drift alert raised in last 15m"
+
+      # PSI-based drift (feature-level) using name regex
+      - alert: DriftPsiCritical
+        expr: {__name__=~"psi_feature_.*"} > 0.3
+        for: 5m
+        labels:
+          severity: critical
+          service: inference
+        annotations:
+          summary: "PSI critical threshold exceeded"
+          description: "One or more PSI feature metrics exceeded 0.3"
+
+      - alert: DriftPsiWarning
+        expr: {__name__=~"psi_feature_.*"} > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "PSI warning threshold exceeded"
+          description: "One or more PSI feature metrics exceeded 0.2"
+
+      # Kafka lag (requires exporter that exposes consumer_group_lag)
+      - alert: KafkaLagHigh
+        expr: max_over_time(consumer_group_lag[5m]) > 10000
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka consumer lag high"
+          description: "consumer_group_lag exceeded 10k for 5m"
+
+      # Redis saturation (using redis exporter metrics)
+      - alert: RedisEvictions
+        expr: increase(redis_evicted_keys_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis evictions > 0"
+          description: "Keys evicted in last 5m"
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_total_system_memory_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis memory > 90%"
+          description: "Redis memory usage above 90%"
+
+      # Batch pipeline back-pressure / drops
+      - alert: MongoBatchQueueHigh
+        expr: mongo_batch_queue_depth > 5000
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "Mongo batch queue depth high"
+          description: "Queue depth above 5000 for 5m"
+
+      - alert: MongoBatchDrops
+        expr: increase(mongo_batch_dropped_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Mongo batch drops detected"
+          description: "Items dropped due to full queue"
+
+      - alert: RedisBatchQueueHigh
+        expr: redis_batch_queue_depth > 2500
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "Redis batch queue depth high"
+          description: "Redis batch queue depth above 2500 for 5m"
+
+      - alert: RedisBatchDrops
+        expr: increase(redis_batch_dropped_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Redis batch drops detected"
+          description: "Redis batch operations dropped due to full queue"
+
+      - alert: DroppedRequestsSpike
+        expr: increase(dropped_requests_total[5m]) > 50
+        for: 2m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Dropped requests exceeded 50 in 5m"
+          description: "Load shedding dropped more than 50 requests in the past 5m"

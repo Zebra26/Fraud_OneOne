@@ -1,0 +1,37 @@
+groups:
+  - name: infra.alerts
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance down"
+          description: "{{ $labels.instance }} is down"
+
+  - name: app.latency
+    rules:
+      - alert: BackendHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(request_latency_ms_bucket[5m])) by (le)
+          ) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backend p95 latency > 60ms"
+          description: "p95 latency above threshold for 5m"
+
+      - alert: InferenceHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(infer_request_latency_ms_bucket[5m])) by (le)
+          ) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inference p95 latency > 60ms"
+          description: "p95 latency above threshold for 5m"

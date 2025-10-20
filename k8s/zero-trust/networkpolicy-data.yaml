@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-default-deny
+  namespace: data
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-allow-from-app
+  namespace: data
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: app
+      ports:
+        - protocol: TCP
+          port: 9092 # kafka
+        - protocol: TCP
+          port: 27017 # mongo
+        - protocol: TCP
+          port: 6379 # redis
+        - protocol: TCP
+          port: 7000 # redis cluster

@@ -1,0 +1,4 @@
+{
+  "keyfile": "/app/tls/server.key",
+  "certfile": "/app/tls/server.crt"
+}

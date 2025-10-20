@@ -1,0 +1,22 @@
+{
+  "title": "Inference Detail",
+  "schemaVersion": 39,
+  "templating": {"list": [
+    {"name":"service","type":"custom","query":"backend,ml-inference,trainer","options":[
+      {"text":"backend","value":"backend"},
+      {"text":"ml-inference","value":"ml-inference","selected":true},
+      {"text":"trainer","value":"trainer"}
+    ],"current":{"text":"ml-inference","value":"ml-inference"}}
+  ]},
+  "panels": [
+    {"type": "timeseries", "title": "Inference p95 Latency (s)", "datasource": {"type": "prometheus", "uid": "Prometheus"},
+     "fieldConfig": {"defaults": {"links": [
+       {"title":"Explore Logs (Loki)",
+        "url": "/explore?left=(datasource:\"Loki\",queries:!((expr:\"{job=\\\"fraud_k\\\", service=\\\"$service\\\", correlation_id=\\\"${__series.labels.correlation_id}\\\"}\")))",
+        "targetBlank": true}
+     ]},"overrides":[]},
+     "targets": [{"expr": "histogram_quantile(0.95, sum(rate(fraud_inference_request_latency_seconds_bucket[5m])) by (le))"}]},
+    {"type": "timeseries", "title": "Requests (inference)", "datasource": {"type": "prometheus", "uid": "Prometheus"},
+     "targets": [{"expr": "sum(rate(fraud_inference_requests_total[1m]))"}]}
+  ]
+}

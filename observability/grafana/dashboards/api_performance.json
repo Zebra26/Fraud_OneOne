@@ -1,0 +1,65 @@
+{
+  "title": "API Performance",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "templating": {"list": [
+    {"name":"service","type":"custom","query":"backend,ml-inference,trainer","options":[
+      {"text":"backend","value":"backend","selected":true},
+      {"text":"ml-inference","value":"ml-inference"},
+      {"text":"trainer","value":"trainer"}
+    ],"current":{"text":"backend","value":"backend"}}
+  ]},
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Backend p95 Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"links": [
+        {"title":"Explore Logs (Loki)",
+         "url": "/explore?left=(datasource:\"Loki\",queries:!((expr:\"{job=\\\"fraud_k\\\", service=\\\"$service\\\", correlation_id=\\\"${__series.labels.correlation_id}\\\"}\")))",
+         "targetBlank": true}
+      ]},"overrides":[]},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(request_latency_ms_bucket[5m])) by (le))"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Inference p95 Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"links": [
+        {"title":"Explore Logs (Loki)",
+         "url": "/explore?left=(datasource:\"Loki\",queries:!((expr:\"{job=\\\"fraud_k\\\", service=\\\"$service\\\", correlation_id=\\\"${__series.labels.correlation_id}\\\"}\")))",
+         "targetBlank": true}
+      ]},"overrides":[]},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(infer_request_latency_ms_bucket[5m])) by (le))"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Backend RPS",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum(rate(fraud_backend_requests_total[1m]))"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Backend Error Rate",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum(rate(fraud_backend_requests_total{status=~\"5..\"}[5m])) / sum(rate(fraud_backend_requests_total[5m]))"}
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Per-route Latency (backend)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(fraud_backend_request_latency_seconds_bucket[5m])) by (le, path))"}
+      ]
+    }
+  ]
+}

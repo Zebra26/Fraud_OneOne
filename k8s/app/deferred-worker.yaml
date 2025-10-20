@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deferred-worker
+  namespace: app
+  labels:
+    app.kubernetes.io/name: deferred-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: deferred-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: deferred-worker
+    spec:
+      containers:
+        - name: deferred-worker
+          image: your-registry/deferred-worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: KAFKA_BROKERS
+              value: kafka.data.svc.cluster.local:9092
+            - name: DEFERRED_TOPIC
+              value: predictions.deferred
+            - name: KAFKA_TOPIC_PREDICTIONS
+              value: predictions
+            - name: INFERENCE_URL
+              value: http://ml-inference.app.svc.cluster.local:8080
+            - name: OFFLINE_WRITE
+              value: "true"
+            - name: MONGO_URI
+              value: mongodb://mongo.data.svc.cluster.local:27017/fraud_db
+            - name: MONGO_DB
+              value: fraud_db
+            - name: REDIS_CLUSTER_NODES
+              value: redis.data.svc.cluster.local:6379
+

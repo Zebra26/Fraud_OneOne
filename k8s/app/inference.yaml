@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-inference
+  namespace: app
+  labels:
+    app.kubernetes.io/name: ml-inference
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ml-inference
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ml-inference
+    spec:
+      containers:
+        - name: ml-inference
+          image: your-registry/ml-inference:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: production
+            - name: ENABLE_MTLS
+              value: "true"
+            - name: USE_ONNXRUNTIME
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-inference
+  namespace: app
+  labels:
+    app.kubernetes.io/name: ml-inference
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ml-inference
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+

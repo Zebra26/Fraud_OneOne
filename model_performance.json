@@ -1,0 +1,23 @@
+{
+  "Supervis\u00e9 (Optimis\u00e9)": {
+    "auc_roc": 0.9738141408949615,
+    "f2_score": 0.9470374252420001,
+    "precision": 0.9016730261226886,
+    "recall": 0.9591008429597253,
+    "optimal_threshold": 0.24877378344535828
+  },
+  "Non Supervis\u00e9 (Optimis\u00e9)": {
+    "auc_roc": 0.4578445688564141,
+    "f2_score": 0.3740773614874334,
+    "precision": 0.10676666666666666,
+    "recall": 1.0,
+    "optimal_threshold": 0.0
+  },
+  "Ensemble": {
+    "auc_roc": 0.9716488864701246,
+    "f2_score": 0.9433380602996485,
+    "precision": 0.8981508658643969,
+    "recall": 0.9553543552919138,
+    "optimal_threshold": 0.3979172736406326
+  }
+}

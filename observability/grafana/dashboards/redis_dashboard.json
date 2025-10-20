@@ -1,0 +1,38 @@
+{
+  "title": "Redis Batch Pipeline",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"expr": "redis_batch_queue_depth"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Operations per second",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "rate(redis_batch_items_total[5m])"},
+        {"expr": "rate(redis_batch_flushes_total[5m])"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Average Flush Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "rate(redis_batch_flush_latency_ms_sum[5m]) / rate(redis_batch_flush_latency_ms_count[5m])"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Dropped operations per second",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "rate(redis_batch_dropped_total[5m])"}
+      ]
+    }
+  ]
+}
+

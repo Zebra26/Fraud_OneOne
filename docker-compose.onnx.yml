@@ -1,0 +1,8 @@
+services:
+  ml-inference:
+    environment:
+      - USE_ONNXRUNTIME=true
+      - INFER_ONNX_BATCH=true
+      - INFER_BATCH_SIZE=${INFER_BATCH_SIZE:-16}
+      - INFER_BATCH_TIMEOUT_MS=${INFER_BATCH_TIMEOUT_MS:-5}
+

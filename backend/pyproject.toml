@@ -1,0 +1,14 @@
+[project]
+name = "fraud-backend"
+version = "0.1.0"
+description = "FastAPI backend for realtime fraud detection"
+authors = [{ name = "Fraud Team" }]
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
