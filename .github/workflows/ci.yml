@@ -43,3 +43,9 @@ jobs:
         run: |
           source .venv/bin/activate || . .venv/Scripts/Activate.ps1
           pytest backend/tests -q || true
+
+      - name: License audit (fail on GPL/AGPL)
+        shell: bash
+        run: |
+          source .venv/bin/activate || . .venv/Scripts/Activate.ps1
+          python scripts/license_audit.py

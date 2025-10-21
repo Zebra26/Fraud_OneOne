@@ -7,6 +7,18 @@ import json
 from pathlib import Path
 from importlib.metadata import distributions, PackageNotFoundError
 
+LICENSE_CANDIDATES = (
+    "LICENSE",
+    "LICENSE.txt",
+    "LICENSE.md",
+    "COPYING",
+    "COPYING.txt",
+    "COPYING.md",
+    "LICENCE",
+    "LICENCE.txt",
+    "LICENCE.md",
+)
+
 
 def extract_license(meta: dict[str, str]) -> tuple[str, list[str]]:
     # Prefer explicit License field
@@ -57,6 +69,7 @@ def is_blocked(license_name: str, classifiers: list[str]) -> bool:
 def main() -> int:
     rows = []
     blocked = []
+    license_blobs: list[tuple[str, str, str]] = []  # (name, version, text)
     for dist in sorted(distributions(), key=lambda d: d.metadata.get("Name", "").lower()):
         md = normalize_meta_text(dist.metadata)
         name = str(md.get("Name", ""))
@@ -77,6 +90,31 @@ def main() -> int:
                 "blocked": blocked_flag,
             }
         )
+
+        # Try to locate a license file in the distribution contents
+        try:
+            files = list(dist.files or [])
+        except Exception:
+            files = []
+        candidate_path = None
+        for f in files:
+            fn = f.name
+            lower = fn.lower()
+            if any(lower.endswith(c.lower()) or lower == c.lower() for c in LICENSE_CANDIDATES):
+                candidate_path = f
+                break
+            if "license" in lower or "licence" in lower or "copying" in lower:
+                candidate_path = f
+                break
+        if candidate_path is not None:
+            try:
+                path = dist.locate_file(candidate_path)
+                text = Path(path).read_text(encoding="utf-8", errors="ignore")
+                if len(text) > 200_000:
+                    text = text[:200_000] + "\n... (truncated)\n"
+                license_blobs.append((name or "<unknown>", version or "", text))
+            except Exception:
+                pass
 
     # Write LICENSES.md
     out = Path(__file__).resolve().parent.parent / "LICENSES.md"
@@ -108,6 +146,20 @@ def main() -> int:
 
     print(f"Wrote {out}")
     print(f"Wrote {out_json}")
+
+    # Append license texts to LICENSES.md
+    if license_blobs:
+        with out.open("a", encoding="utf-8") as f:
+            f.write("\n\n---\n\n")
+            f.write("## License Texts\n\n")
+            for name, version, text in license_blobs:
+                header = f"### {name} {version}".strip()
+                f.write(header + "\n\n")
+                f.write("```text\n")
+                f.write(text)
+                if not text.endswith("\n"):
+                    f.write("\n")
+                f.write("```\n\n")
     if blocked:
         print("BLOCKED: Potential GPL/AGPL detected:")
         for b in blocked:
