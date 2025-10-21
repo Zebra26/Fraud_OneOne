@@ -44,8 +44,34 @@ jobs:
           source .venv/bin/activate || . .venv/Scripts/Activate.ps1
           pytest backend/tests -q || true
 
-      - name: License audit (fail on GPL/AGPL)
+  license-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create venv and install deps (Linux)
         shell: bash
         run: |
-          source .venv/bin/activate || . .venv/Scripts/Activate.ps1
+          python -m venv .venv
+          source .venv/bin/activate
+          bash scripts/setup_env.sh
+
+      - name: Run license audit (fail on GPL/AGPL)
+        shell: bash
+        run: |
+          source .venv/bin/activate
           python scripts/license_audit.py
+
+      - name: Upload license artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-audit
+          path: |
+            LICENSES.md
+            third_party_licenses.json

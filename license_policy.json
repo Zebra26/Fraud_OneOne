@@ -1,0 +1,9 @@
+{
+  "allow_packages": [],
+  "deny_packages": [],
+  "ignore_packages": [],
+  "allow_licenses": ["LGPL"],
+  "deny_licenses": ["AGPL", "GNU Affero", "GPL"],
+  "treat_unknown_as_blocked": false
+}
+

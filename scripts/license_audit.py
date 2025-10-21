@@ -47,21 +47,78 @@ GPL_PAT = re.compile(r"\bAGPL\b|\bGNU\s+Affero\b|\bGPL\b|General Public License"
 LGPL_PAT = re.compile(r"Lesser General Public License", re.I)
 
 
-def is_blocked(license_name: str, classifiers: list[str]) -> bool:
-    """Block AGPL/GPL unless explicitly marked as LGPL. Prefer classifiers over free-text."""
+def load_policy() -> dict:
+    root = Path(__file__).resolve().parent.parent
+    path = root / "license_policy.json"
+    policy: dict = {
+        "allow_packages": [],
+        "deny_packages": [],
+        "ignore_packages": [],
+        "allow_licenses": ["LGPL"],
+        "deny_licenses": ["AGPL", "GNU Affero", "GPL"],
+        "treat_unknown_as_blocked": False,
+    }
+    try:
+        if path.exists():
+            user = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(user, dict):
+                policy.update(user)
+    except Exception:
+        pass
+
+    def _compile(items):
+        pats = []
+        for it in items or []:
+            try:
+                pats.append(re.compile(it, re.I))
+            except re.error:
+                pats.append(re.compile(re.escape(str(it)), re.I))
+        return pats
+
+    policy["_allow_pkg"] = _compile(policy.get("allow_packages", []))
+    policy["_deny_pkg"] = _compile(policy.get("deny_packages", []))
+    policy["_ignore_pkg"] = _compile(policy.get("ignore_packages", []))
+    policy["_allow_lic"] = _compile(policy.get("allow_licenses", []))
+    policy["_deny_lic"] = _compile(policy.get("deny_licenses", []))
+    return policy
+
+
+def is_blocked_with_policy(name: str, license_name: str, classifiers: list[str], policy: dict) -> bool:
+    def any_match(pats, s: str) -> bool:
+        return any(p.search(s or "") for p in pats)
+
+    # Package-level policy
+    if any_match(policy.get("_ignore_pkg", []), name):
+        return False
+    if any_match(policy.get("_allow_pkg", []), name):
+        return False
+    if any_match(policy.get("_deny_pkg", []), name):
+        return True
+
+    # License-level policy (prefer classifiers)
+    for c in classifiers or []:
+        if any_match(policy.get("_deny_lic", []), c):
+            return True
+        if any_match(policy.get("_allow_lic", []), c):
+            return False
+    if license_name and len(license_name or "") < 64:
+        if any_match(policy.get("_deny_lic", []), license_name):
+            return True
+        if any_match(policy.get("_allow_lic", []), license_name):
+            return False
+
+    # Heuristic GPL/AGPL block
     def flag(s: str) -> bool:
         return bool(GPL_PAT.search(s)) and not bool(LGPL_PAT.search(s))
 
-    # If classifiers are present, trust them first
     if classifiers:
         for c in classifiers:
             if flag(c):
                 return True
-        # If classifiers indicate OSI-approved non-GPL, do not block even if free-text contains GPL mentions.
         return False
-
-    # Otherwise, check short license identifiers only (avoid scanning long license bodies)
     if license_name and len(license_name) < 64 and flag(license_name):
+        return True
+    if policy.get("treat_unknown_as_blocked") and not license_name and not classifiers:
         return True
     return False
 
@@ -70,6 +127,7 @@ def main() -> int:
     rows = []
     blocked = []
     license_blobs: list[tuple[str, str, str]] = []  # (name, version, text)
+    policy = load_policy()
     for dist in sorted(distributions(), key=lambda d: d.metadata.get("Name", "").lower()):
         md = normalize_meta_text(dist.metadata)
         name = str(md.get("Name", ""))
@@ -77,7 +135,7 @@ def main() -> int:
         home = str(md.get("Home-page", md.get("Home-Page", "")))
         license_name, classifiers = extract_license(md)
         lic_classifiers = "; ".join(classifiers)
-        blocked_flag = is_blocked(license_name, classifiers)
+        blocked_flag = is_blocked_with_policy(name or "", license_name, classifiers, policy)
         if blocked_flag:
             blocked.append(name or f"<unknown>@{version}")
         rows.append(
