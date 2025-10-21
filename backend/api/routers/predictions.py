@@ -16,6 +16,7 @@ from ..dependencies import (
     get_mongo_client,
     get_redis_cache,
     get_explanations_batch_writer,
+    get_redis_batch_writer,
 )
 from ...security.crypto_utils import encrypt_text, pii_token
 from ..schemas import PredictionExplanation, PredictionResponse, RiskBreakdownSchema, TransactionIn

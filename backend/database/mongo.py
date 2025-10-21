@@ -17,7 +17,13 @@ class MongoDBClient:
         if tls_enabled:
             client_kwargs.update(tls=True, tlsAllowInvalidCertificates=not tls_verify)
             if tls_ca_path:
-                client_kwargs["tlsCAFile"] = tls_ca_path
+                try:
+                    from pathlib import Path as _Path
+                    text = _Path(tls_ca_path).read_text(encoding="utf-8", errors="ignore")
+                    if "BEGIN CERTIFICATE" in text:
+                        client_kwargs["tlsCAFile"] = tls_ca_path
+                except Exception:
+                    pass
             cert_pem = os.getenv("TLS_CERT_PATH")
             if os.getenv("ENABLE_MTLS", "false").strip().lower() in {"1", "true", "yes"} and cert_pem:
                 # tlsCertificateKeyFile must contain both client cert and key (PEM)

@@ -1,15 +1,14 @@
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, Sequence
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class GraphContext(BaseModel):
     source_id: str
     target_id: str
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class TransactionFeatures(BaseModel):
@@ -29,13 +28,12 @@ class TransactionFeatures(BaseModel):
     transactions_last_24h: int = Field(..., ge=0)
     customer_segment: Literal["standard", "premium", "business"]
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class TransactionIn(BaseModel):
-    transaction_id: str = Field(..., example="txn_123")
-    account_id: str = Field(..., example="acc_456")
+    transaction_id: str = Field(..., json_schema_extra={"example": "txn_123"})
+    account_id: str = Field(..., json_schema_extra={"example": "acc_456"})
     amount: float = Field(..., gt=0)
     currency: str = Field("EUR")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -47,8 +45,7 @@ class TransactionIn(BaseModel):
     sequence: Optional[List[List[float]]] = None
     features: TransactionFeatures
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class TransactionIngestResponse(BaseModel):

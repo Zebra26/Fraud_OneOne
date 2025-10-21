@@ -2,83 +2,79 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
 
-from pydantic import BaseSettings, Field, root_validator
+from pydantic import Field, model_validator, AliasChoices
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_env: str = Field("development", env="APP_ENV")
-    app_host: str = Field("0.0.0.0", env="APP_HOST")
-    app_port: int = Field(8000, env="APP_PORT")
+    app_env: str = Field("development", validation_alias=AliasChoices("APP_ENV"))
+    app_host: str = Field("0.0.0.0", validation_alias=AliasChoices("APP_HOST"))
+    app_port: int = Field(8000, validation_alias=AliasChoices("APP_PORT"))
 
-    enable_tls: bool = Field(False, env="ENABLE_TLS")
-    tls_cert_path: str = Field("/app/tls/server.crt", env="TLS_CERT_PATH")
-    tls_key_path: str = Field("/app/tls/server.key", env="TLS_KEY_PATH")
-    tls_ca_path: str | None = Field(None, env="TLS_CA_PATH")
-    enable_mtls: bool = Field(False, env="ENABLE_MTLS")
+    enable_tls: bool = Field(False, validation_alias=AliasChoices("ENABLE_TLS"))
+    tls_cert_path: str = Field("/app/tls/server.crt", validation_alias=AliasChoices("TLS_CERT_PATH"))
+    tls_key_path: str = Field("/app/tls/server.key", validation_alias=AliasChoices("TLS_KEY_PATH"))
+    tls_ca_path: str | None = Field(None, validation_alias=AliasChoices("TLS_CA_PATH"))
+    enable_mtls: bool = Field(False, validation_alias=AliasChoices("ENABLE_MTLS"))
 
-    mongo_uri: str = Field(..., env="MONGO_URI")
-    mongo_db: str = Field("fraud_db", env="MONGO_DB")
-    mongo_ssl: bool = Field(True, env="MONGO_SSL")
-    mongo_tls_ca_path: str | None = Field(None, env="MONGO_TLS_CA_PATH")
+    mongo_uri: str = Field(..., validation_alias=AliasChoices("MONGO_URI"))
+    mongo_db: str = Field("fraud_db", validation_alias=AliasChoices("MONGO_DB"))
+    mongo_ssl: bool = Field(True, validation_alias=AliasChoices("MONGO_SSL"))
+    mongo_tls_ca_path: str | None = Field(None, validation_alias=AliasChoices("MONGO_TLS_CA_PATH"))
 
-    redis_cluster_nodes: str = Field("redis-cluster:6379", env="REDIS_CLUSTER_NODES")
-    redis_password: str | None = Field(None, env="REDIS_PASSWORD")
-    redis_use_ssl: bool = Field(True, env="REDIS_USE_SSL")
-    feature_store_uri: str = Field("redis+cluster://redis-cluster:6379", env="FEATURE_STORE_URI")
+    redis_cluster_nodes: str = Field("redis-cluster:6379", validation_alias=AliasChoices("REDIS_CLUSTER_NODES"))
+    redis_password: str | None = Field(None, validation_alias=AliasChoices("REDIS_PASSWORD"))
+    redis_use_ssl: bool = Field(True, validation_alias=AliasChoices("REDIS_USE_SSL"))
+    feature_store_uri: str = Field("redis+cluster://redis-cluster:6379", validation_alias=AliasChoices("FEATURE_STORE_URI"))
 
-    kafka_brokers: str = Field("kafka:9092", env="KAFKA_BROKERS")
-    kafka_topic_transactions: str = Field("transactions", env="KAFKA_TOPIC_TRANSACTIONS")
-    kafka_topic_predictions: str = Field("predictions", env="KAFKA_TOPIC_PREDICTIONS")
-    kafka_topic_features: str = Field("transactions.features", env="KAFKA_TOPIC_FEATURES")
+    kafka_brokers: str = Field("kafka:9092", validation_alias=AliasChoices("KAFKA_BROKERS"))
+    kafka_topic_transactions: str = Field("transactions", validation_alias=AliasChoices("KAFKA_TOPIC_TRANSACTIONS"))
+    kafka_topic_predictions: str = Field("predictions", validation_alias=AliasChoices("KAFKA_TOPIC_PREDICTIONS"))
+    kafka_topic_features: str = Field("transactions.features", validation_alias=AliasChoices("KAFKA_TOPIC_FEATURES"))
 
-    model_directory: str = Field("/app/models", env="MODEL_DIR")
-    model_path: str = Field("/app/models/fraud_detection_advanced_model.pkl", env="MODEL_PATH")
-    model_performance_path: str = Field("/app/models/model_performance.json", env="MODEL_PERFORMANCE_PATH")
+    model_directory: str = Field("/app/models", validation_alias=AliasChoices("MODEL_DIR"))
+    model_path: str = Field("/app/models/fraud_detection_advanced_model.pkl", validation_alias=AliasChoices("MODEL_PATH"))
+    model_performance_path: str = Field("/app/models/model_performance.json", validation_alias=AliasChoices("MODEL_PERFORMANCE_PATH"))
 
-    threshold_review: float = Field(0.7, env="THRESHOLD_REVIEW")
-    threshold_block: float = Field(0.9, env="THRESHOLD_BLOCK")
-    optimal_threshold_path: str = Field("/app/models/optimal_threshold.txt", env="OPTIMAL_THRESHOLD_PATH")
+    threshold_review: float = Field(0.7, validation_alias=AliasChoices("THRESHOLD_REVIEW"))
+    threshold_block: float = Field(0.9, validation_alias=AliasChoices("THRESHOLD_BLOCK"))
+    optimal_threshold_path: str = Field("/app/models/optimal_threshold.txt", validation_alias=AliasChoices("OPTIMAL_THRESHOLD_PATH"))
 
     # Micro-batching / back-pressure (Mongo explanations)
-    batch_max_size: int = Field(1000, env="BATCH_MAX_SIZE")
-    batch_flush_interval_ms: int = Field(200, env="BATCH_FLUSH_INTERVAL_MS")
-    batch_queue_max: int = Field(10000, env="BATCH_QUEUE_MAX")
-    batch_block_on_full: bool = Field(True, env="BATCH_BLOCK_ON_FULL")
+    batch_max_size: int = Field(1000, validation_alias=AliasChoices("BATCH_MAX_SIZE"))
+    batch_flush_interval_ms: int = Field(200, validation_alias=AliasChoices("BATCH_FLUSH_INTERVAL_MS"))
+    batch_queue_max: int = Field(10000, validation_alias=AliasChoices("BATCH_QUEUE_MAX"))
+    batch_block_on_full: bool = Field(True, validation_alias=AliasChoices("BATCH_BLOCK_ON_FULL"))
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
-    @root_validator
-    def _security_checks(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        if values.get("enable_tls"):
-            for path_key in ("tls_cert_path", "tls_key_path"):
-                candidate = values.get(path_key)
-                if not candidate or not Path(candidate).exists():
-                    raise ValueError(f"{path_key.upper()} must point to an existing file when ENABLE_TLS=true.")
-
-        app_env = (values.get("app_env") or "").lower()
+    @model_validator(mode="after")
+    def _security_checks(self) -> "Settings":
+        app_env = (self.app_env or "").lower()
 
         # Enforce strict security in production; relax for local/dev usage.
         if app_env == "production":
-            redis_password = values.get("redis_password")
-            if not redis_password:
+            if self.enable_tls:
+                for path_key in ("tls_cert_path", "tls_key_path"):
+                    candidate = getattr(self, path_key)
+                    if not candidate or not Path(candidate).exists():
+                        raise ValueError(f"{path_key.upper()} must point to an existing file when ENABLE_TLS=true.")
+            if not (self.redis_password or ""):
                 raise ValueError("REDIS_PASSWORD must be set to secure Redis connections.")
 
-            if not values.get("redis_use_ssl"):
+            if not self.redis_use_ssl:
                 raise ValueError("REDIS_USE_SSL must be true to enforce TLS access to Redis.")
 
-            mongo_uri = values.get("mongo_uri", "")
-            if not values.get("mongo_ssl"):
+            if not self.mongo_ssl:
                 raise ValueError("MONGO_SSL must be true to enforce TLS access to MongoDB.")
-            if "@" not in mongo_uri:
+            if "@" not in (self.mongo_uri or ""):
                 raise ValueError("When MONGO_SSL=true, MONGO_URI must include credentials to avoid anonymous access.")
 
-            ca_path = values.get("mongo_tls_ca_path")
+            ca_path = self.mongo_tls_ca_path
             if ca_path and not Path(ca_path).exists():
                 raise ValueError("MONGO_TLS_CA_PATH must point to an existing CA certificate file.")
 
-        return values
+        return self
 
     @property
     def kafka_broker_list(self) -> List[str]:

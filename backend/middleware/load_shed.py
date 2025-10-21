@@ -19,14 +19,16 @@ def _cpu_percent() -> float:
         return 0.0
 
 
+CPU_GAUGE = Gauge("cpu_utilization_pct", "Process CPU utilization percent (best-effort)")
+DROPPED_COUNTER = Counter("dropped_requests_total", "Total requests dropped due to load shedding")
+
+
 class LoadShedMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.cpu_threshold = float(os.getenv("SHED_CPU_PCT", "85"))
         self.mongo_queue_max = int(os.getenv("SHED_MONGO_QUEUE_MAX", "8000"))
         self.redis_queue_max = int(os.getenv("SHED_REDIS_QUEUE_MAX", "4000"))
-        self.cpu_gauge = Gauge("cpu_utilization_pct", "Process CPU utilization percent (best-effort)")
-        self.dropped = Counter("dropped_requests_total", "Total requests dropped due to load shedding")
 
     async def dispatch(self, request: Request, call_next: Callable):
         # Shed only for scoring endpoints (hot path), allow health/metrics/admin
@@ -34,7 +36,7 @@ class LoadShedMiddleware(BaseHTTPMiddleware):
             # CPU check
             cpu = _cpu_percent()
             try:
-                self.cpu_gauge.set(cpu)
+                CPU_GAUGE.set(cpu)
             except Exception:
                 pass
             if cpu >= self.cpu_threshold:
@@ -50,14 +52,14 @@ class LoadShedMiddleware(BaseHTTPMiddleware):
                 mongo_qsize = getattr(get_explanations_batch_writer(), "_queue", None)
                 if hasattr(mongo_qsize, "qsize") and mongo_qsize.qsize() > self.mongo_queue_max:  # type: ignore[attr-defined]
                     try:
-                        self.dropped.inc()
+                        DROPPED_COUNTER.inc()
                     except Exception:
                         pass
                     return JSONResponse({"status": "degraded_mode", "reason": "mongo_backlog"}, status_code=503)
                 redis_qsize = getattr(get_redis_batch_writer(), "_queue", None)
                 if hasattr(redis_qsize, "qsize") and redis_qsize.qsize() > self.redis_queue_max:  # type: ignore[attr-defined]
                     try:
-                        self.dropped.inc()
+                        DROPPED_COUNTER.inc()
                     except Exception:
                         pass
                     return JSONResponse({"status": "degraded_mode", "reason": "redis_backlog"}, status_code=503)

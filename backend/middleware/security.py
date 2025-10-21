@@ -8,6 +8,7 @@ from typing import Callable
 import os
 import redis
 from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Histogram
 
@@ -28,19 +29,19 @@ REQUEST_LATENCY = Histogram(
 )
 
 
-class SecurityMiddleware:
+class SecurityMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, redis_url: str = "redis://redis-cluster:6379/0"):
-        self.app = app
+        super().__init__(app)
         self.redis = redis.from_url(redis_url, decode_responses=True)
         self.capacity = int(os.getenv("RATE_LIMIT_CAPACITY", "100"))
         self.refill_per_min = int(os.getenv("RATE_LIMIT_REFILL_PER_MIN", "50"))
         self.allowed_skew = int(os.getenv("ALLOWED_SKEW_SECONDS", "60"))
         self.require_jti = os.getenv("JWT_REQUIRE_JTI", "false").strip().lower() in {"1", "true", "yes"}
 
-    async def __call__(self, request: Request, call_next: Callable):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
         start = time.perf_counter()
 
-        if request.url.path in {"/health", "/models/info"}:
+        if request.url.path in {"/health", "/models/info", "/admin/health"}:
             return await call_next(request)
 
         correlation_id = request.headers.get("X-Correlation-ID", str(time.time_ns()))

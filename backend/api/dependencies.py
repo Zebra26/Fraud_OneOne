@@ -1,12 +1,12 @@
 from functools import lru_cache
 
 from .config import get_settings
-from database.mongo import MongoDBClient
-from database.mongo_batch import MongoBatchWriter
-from database.redis_batch import RedisBatchWriter
-from database.redis_client import RedisCache
-from streaming.kafka_producer import TransactionProducer
-from utils.model_service import AdvancedFraudModelService
+from ..database.mongo import MongoDBClient
+from ..database.mongo_batch import MongoBatchWriter
+from ..database.redis_batch import RedisBatchWriter
+from ..database.redis_client import RedisCache
+from ..streaming.kafka_producer import TransactionProducer
+from ..utils.model_service import AdvancedFraudModelService
 
 
 @lru_cache
@@ -24,12 +24,22 @@ def get_mongo_client() -> MongoDBClient:
 @lru_cache
 def get_redis_cache() -> RedisCache:
     settings = get_settings()
-    return RedisCache(
-        startup_nodes=settings.redis_cluster_startup_nodes,
-        password=settings.redis_password or None,
-        use_ssl=settings.redis_use_ssl,
-        ca_certs=settings.tls_ca_path if settings.redis_use_ssl else None,
-    )
+    try:
+        return RedisCache(
+            startup_nodes=settings.redis_cluster_startup_nodes,
+            password=settings.redis_password or None,
+            use_ssl=settings.redis_use_ssl,
+            ca_certs=settings.tls_ca_path if settings.redis_use_ssl else None,
+        )
+    except Exception:
+        class _Dummy:
+            async def health(self) -> bool:
+                return False
+
+            async def close(self) -> None:
+                return None
+
+        return _Dummy()  # type: ignore[return-value]
 
 
 @lru_cache
