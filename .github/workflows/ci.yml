@@ -75,3 +75,22 @@ jobs:
           path: |
             LICENSES.md
             third_party_licenses.json
+
+  lock-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pip-tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pip-tools
+      - name: Recompile lock file
+        run: |
+          python -m piptools compile -o requirements.lock.txt requirements.in
+      - name: Verify no diff in lock
+        run: |
+          git diff --exit-code requirements.lock.txt || (echo 'Lock file out of date. Run scripts/piptools.* to update.' && exit 1)
