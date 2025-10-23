@@ -1,29 +1,26 @@
 services:
   backend:
-    image: fraud-backend:dev
     build:
-      context: ./backend
-    env_file:
-      - .env
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
-      - APP_ENV=development
-      - REDIS_CLUSTER_NODES=redis-cluster:7000,redis-cluster:7001,redis-cluster:7002
-      - FEATURE_STORE_URI=redis+cluster://redis-cluster:7000
-      - REDIS_USE_SSL=false
-      - ENABLE_TLS=false
-    volumes:
-      - models_data:/app/models
-      - ./backend/tls:/app/tls:ro
-      - ./security/certs:/app/security/certs:ro
+      APP_ENV: development
+      MONGO_URI: mongodb://mongo:27017/fraud_db
+      MONGO_DB: fraud_db
+      MONGO_SSL: "false"
+      # Updated to 6-node Redis Cluster (3 masters + 3 replicas)
+      REDIS_CLUSTER_NODES: "redis-node-0:6379,redis-node-1:6379,redis-node-2:6379,redis-node-3:6379,redis-node-4:6379,redis-node-5:6379"
+      REDIS_USE_SSL: "false"
+      
+      FEATURE_STORE_URI: redis://redis-node-0:6379
     ports:
       - "8000:8000"
-      - "8443:8443"
-    labels:
-      service: backend
     depends_on:
-      - kafka
       - mongo
-      - redis-cluster
+      - redis-cluster-init
+    networks:
+      - default
+      - redis-internal
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -53,15 +50,97 @@ services:
     volumes:
       - mongo_data:/data/db
 
-  redis-cluster:
-    image: grokzen/redis-cluster:latest
-    ports:
-      - "7000-7005:7000-7005"
+  # Redis Cluster: 6 nodes (3 masters + 3 replicas)
+  redis-node-0:
+    image: redis:7.2-alpine
+    command: >-
+      redis-server --bind 0.0.0.0 --port 6379 --cluster-enabled yes
+      --cluster-announce-ip redis-node-0 --cluster-announce-port 6379
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+    networks:
+      - redis-internal
+
+  redis-node-1:
+    image: redis:7.2-alpine
+    command: >-
+      redis-server --bind 0.0.0.0 --port 6379 --cluster-enabled yes
+      --cluster-announce-ip redis-node-1 --cluster-announce-port 6379
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+    networks:
+      - redis-internal
+
+  redis-node-2:
+    image: redis:7.2-alpine
+    command: >-
+      redis-server --bind 0.0.0.0 --port 6379 --cluster-enabled yes
+      --cluster-announce-ip redis-node-2 --cluster-announce-port 6379
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+    networks:
+      - redis-internal
+
+  redis-node-3:
+    image: redis:7.2-alpine
+    command: >-
+      redis-server --bind 0.0.0.0 --port 6379 --cluster-enabled yes
+      --cluster-announce-ip redis-node-3 --cluster-announce-port 6379
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+    networks:
+      - redis-internal
+
+  redis-node-4:
+    image: redis:7.2-alpine
+    command: >-
+      redis-server --bind 0.0.0.0 --port 6379 --cluster-enabled yes
+      --cluster-announce-ip redis-node-4 --cluster-announce-port 6379
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+    networks:
+      - redis-internal
+
+  redis-node-5:
+    image: redis:7.2-alpine
+    command: >-
+      redis-server --bind 0.0.0.0 --port 6379 --cluster-enabled yes
+      --cluster-announce-ip redis-node-5 --cluster-announce-port 6379
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+    networks:
+      - redis-internal
+
+  # One-off job to bootstrap the cluster (3 masters + 3 replicas)
+  redis-cluster-init:
+    image: redis:7.2-alpine
+    depends_on:
+      - redis-node-0
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+      - redis-node-4
+      - redis-node-5
+    entrypoint: ["sh", "-lc"]
+    command: >-
+      'sleep 3 &&
+      echo yes | redis-cli -a ${REDIS_PASSWORD} --cluster create
+      redis-node-0:6379 redis-node-1:6379 redis-node-2:6379 redis-node-3:6379 redis-node-4:6379 redis-node-5:6379
+      --cluster-replicas 1'
+    networks:
+      - redis-internal
 
   redisinsight:
     image: redislabs/redisinsight:latest
     depends_on:
-      - redis-cluster
+      - redis-node-0
     ports:
       - "8001:5540"
     environment:
@@ -75,15 +154,18 @@ services:
       - .env
     environment:
       - APP_ENV=development
-      - REDIS_CLUSTER_NODES=redis-cluster:7000,redis-cluster:7001,redis-cluster:7002
-      - FEATURE_STORE_URI=redis+cluster://redis-cluster:7000
+      - REDIS_CLUSTER_NODES=redis-node-0:6379,redis-node-1:6379,redis-node-2:6379,redis-node-3:6379,redis-node-4:6379,redis-node-5:6379
+      
+      - FEATURE_STORE_URI=redis://redis-node-0:6379
       - REDIS_USE_SSL=false
       - ENABLE_JWT_AUTH=true
       - ENABLE_HMAC_SIGNING=true
     depends_on:
       - kafka
-      - redis-cluster
+      - redis-cluster-init
       - mongo
+    networks:
+      - redis-internal
     volumes:
       - models_data:/app/models
       - ./backend/tls:/app/tls:ro
@@ -148,15 +230,16 @@ services:
       MLFLOW_TRACKING_URI: file:/workspace/mlruns
       MLFLOW_EXPERIMENT_NAME: fraud-detection
       APP_ENV: development
-      REDIS_CLUSTER_NODES: redis-cluster:7000,redis-cluster:7001,redis-cluster:7002
-      FEATURE_STORE_URI: redis+cluster://redis-cluster:7000
+      REDIS_CLUSTER_NODES: redis-node-0:6379,redis-node-1:6379,redis-node-2:6379,redis-node-3:6379,redis-node-4:6379,redis-node-5:6379
+      
+      FEATURE_STORE_URI: redis://redis-node-0:6379
       REDIS_USE_SSL: "false"
     volumes:
       - models_data:/workspace/models
       - ./mlruns:/workspace/mlruns
     depends_on:
       - mongo
-      - redis-cluster
+      - redis-node-0 
       - kafka
     command: ["python", "train_pipeline.py"]
 
@@ -174,7 +257,8 @@ services:
       OFFLINE_WRITE: "true"
       MONGO_URI: mongodb://mongo:27017/fraud_db
       MONGO_DB: fraud_db
-      REDIS_CLUSTER_NODES: redis-cluster:7000,redis-cluster:7001,redis-cluster:7002
+      REDIS_CLUSTER_NODES: redis-node-0:6379,redis-node-1:6379,redis-node-2:6379,redis-node-3:6379,redis-node-4:6379,redis-node-5:6379
+      
       REDIS_USE_SSL: "false"
     depends_on:
       - kafka
@@ -203,3 +287,8 @@ volumes:
   spark-checkpoints:
   models_data:
   grafana_data:
+
+networks:
+  redis-internal:
+    driver: bridge
+    internal: true

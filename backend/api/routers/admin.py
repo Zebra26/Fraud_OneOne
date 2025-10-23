@@ -1,10 +1,13 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 import os
 import time
 import json
 import httpx
 
-from ..dependencies import get_kafka_producer, get_mongo_client, get_redis_cache
+from ..dependencies import get_kafka_producer, get_mongo_client
+from ..config import get_settings
+from redis.asyncio.cluster import RedisCluster
 from ..schemas import HealthResponse
 from ...security.rbac import require_roles
 from ...security.hmac_utils import sign_request_v2
@@ -12,16 +15,32 @@ from ...security.hmac_utils import sign_request_v2
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+_health_logger = logging.getLogger("backend.health")
+
+async def _check_redis() -> str:
+    settings = get_settings()
+    try:
+        rc = RedisCluster.from_url(
+            settings.feature_store_uri,
+            decode_responses=True,
+            socket_connect_timeout=2,
+        )
+        await rc.ping()
+        await rc.aclose()
+        return "ok"
+    except Exception as e:
+        _health_logger.error(f"REDIS HEALTH ERROR: {type(e).__name__} - {e}")
+        return "error"
+
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
     mongo=Depends(get_mongo_client),
-    redis_cache=Depends(get_redis_cache),
     kafka=Depends(get_kafka_producer),
 ):
     dependencies = {
         "mongo": "ok" if await mongo.health() else "error",
-        "redis": "ok" if await redis_cache.health() else "error",
+        "redis": await _check_redis(),
         "kafka": "ok" if kafka is not None else "error",
     }
     status = "ok" if all(value == "ok" for value in dependencies.values()) else "degraded"

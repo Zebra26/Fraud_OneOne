@@ -12,3 +12,9 @@ line-length = 88
 [tool.isort]
 profile = "black"
 
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:The 'app' shortcut is now deprecated.*:DeprecationWarning:httpx._client",
+    "ignore:There is no current event loop:DeprecationWarning:motor.core",
+]

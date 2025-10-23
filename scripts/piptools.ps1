@@ -1,10 +1,10 @@
-$ErrorActionPreference = "Stop"
-Set-StrictMode -Version Latest
-
 param(
   [switch]$Sync,
   [switch]$Upgrade
 )
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 
 function Ensure-PipTools {
   python -m pip install --upgrade pip setuptools wheel | Out-Null
@@ -26,4 +26,3 @@ if ($Sync) {
 }
 
 Write-Host "pip-tools done. Updated requirements.lock.txt" -ForegroundColor Green
-
