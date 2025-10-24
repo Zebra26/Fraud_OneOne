@@ -36,9 +36,11 @@ app = FastAPI(
     description="API FastAPI pour scoring de fraude avec MLflow tracking et suivi des metriques.",
 )
 
+origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+allow_origins = [o.strip() for o in origins_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

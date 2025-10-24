@@ -7,6 +7,7 @@ from typing import Callable
 
 import os
 import redis
+from redis.cluster import RedisCluster
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from fastapi.responses import JSONResponse
@@ -30,9 +31,15 @@ REQUEST_LATENCY = Histogram(
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, redis_url: str = "redis://redis-cluster:6379/0"):
+    def __init__(self, app, redis_url: str = ""):
         super().__init__(app)
-        self.redis = redis.from_url(redis_url, decode_responses=True)
+        url = os.getenv("REDIS_URL", redis_url or "redis://redis-node-0:6379/0")
+        # Use Cluster client to handle MOVED redirections
+        try:
+            self.redis = RedisCluster.from_url(url, decode_responses=True)
+        except Exception:
+            # Fallback to non-cluster for dev if cluster not available
+            self.redis = redis.from_url(url, decode_responses=True)
         self.capacity = int(os.getenv("RATE_LIMIT_CAPACITY", "100"))
         self.refill_per_min = int(os.getenv("RATE_LIMIT_REFILL_PER_MIN", "50"))
         self.allowed_skew = int(os.getenv("ALLOWED_SKEW_SECONDS", "60"))

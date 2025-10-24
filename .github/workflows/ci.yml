@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           source .venv/bin/activate || . .venv/Scripts/Activate.ps1
-          pytest backend/tests -q || true
+          pytest backend/tests -q
 
   license-scan:
     runs-on: ubuntu-latest

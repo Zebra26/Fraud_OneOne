@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Any
 
 from .config import get_settings
 from ..database.mongo import MongoDBClient
@@ -37,6 +38,15 @@ def get_redis_cache() -> RedisCache:
                 return False
 
             async def close(self) -> None:
+                return None
+
+            async def pipeline_set_many(self, kv_ttl):
+                return None
+
+            async def set_feature_vector(self, key: str, value: Any, ttl_seconds: int = 3600) -> None:
+                return None
+
+            async def set_risk_score(self, transaction_id: str, score: float, ttl_seconds: int = 600) -> None:
                 return None
 
         return _Dummy()  # type: ignore[return-value]

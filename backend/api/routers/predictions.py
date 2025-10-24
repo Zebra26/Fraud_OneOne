@@ -137,7 +137,10 @@ async def score_transaction(
     threshold = float(result.get("threshold", 0.7))
     breakdown = result.get("breakdown", {})
 
-    metadata = get_model_service().model_metadata()
+    try:
+        metadata = get_model_service().model_metadata()
+    except Exception:
+        metadata = {}
 
     explanation = PredictionExplanation(
         base_value=0.0,

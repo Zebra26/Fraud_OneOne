@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import os
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from prometheus_client import Counter, Gauge, Histogram

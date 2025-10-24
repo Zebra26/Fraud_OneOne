@@ -6,10 +6,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential openssl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
+# Requirements are in the service directory when building from repo root
+COPY services/ml-inference/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py ensemble.py metrics.py .
+# Copy service sources (all needed modules)
+COPY services/ml-inference/app.py .
+COPY services/ml-inference/ensemble.py .
+COPY services/ml-inference/inference.py .
+COPY services/ml-inference/metrics.py .
+COPY services/ml-inference/logging_config.py .
+COPY services/ml-inference/safe_mode.py .
+
+# Include shared backend modules required by app imports
+COPY backend/security ./backend/security
+COPY backend/monitoring ./backend/monitoring
+COPY backend/logging_config.py ./backend/logging_config.py
 
 RUN mkdir -p /app/models
 

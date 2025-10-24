@@ -11,8 +11,11 @@ services:
       # Updated to 6-node Redis Cluster (3 masters + 3 replicas)
       REDIS_CLUSTER_NODES: "redis-node-0:6379,redis-node-1:6379,redis-node-2:6379,redis-node-3:6379,redis-node-4:6379,redis-node-5:6379"
       REDIS_USE_SSL: "false"
-      
       FEATURE_STORE_URI: redis://redis-node-0:6379
+      REDIS_URL: redis://redis-node-0:6379/0
+      JWT_SECRET_KEY: dGVzdC1zZWNyZXQ=
+      API_HMAC_KEY: aG1hYy1zZWNyZXQ=
+      RETRY_ATTEMPTS: "0"
     ports:
       - "8000:8000"
     depends_on:
@@ -149,7 +152,8 @@ services:
   ml-inference:
     image: fraud-ml-inference:dev
     build:
-      context: ./services/ml-inference
+      context: .
+      dockerfile: services/ml-inference/Dockerfile
     env_file:
       - .env
     environment:
@@ -160,6 +164,10 @@ services:
       - REDIS_USE_SSL=false
       - ENABLE_JWT_AUTH=true
       - ENABLE_HMAC_SIGNING=true
+      - ENABLE_MTLS=false
+      - ENABLE_TLS=false
+      - JWT_SECRET_KEY=dGVzdC1zZWNyZXQ=
+      - API_HMAC_KEY=aG1hYy1zZWNyZXQ=
     depends_on:
       - kafka
       - redis-cluster-init

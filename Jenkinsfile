@@ -85,7 +85,10 @@ pipeline {
             archiveArtifacts artifacts: 'models/**', onlyIfSuccessful: true
         }
         cleanup {
-            sh 'docker system prune -f || true'
+            sh '''
+                docker compose -f ${COMPOSE_FILE} down --remove-orphans || true
+                docker image prune -f || true
+            '''
         }
     }
 }
