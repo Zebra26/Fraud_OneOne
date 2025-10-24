@@ -50,9 +50,9 @@ except Exception:
 from backend.security.hmac_utils import verify_request_v2 as verify_hmac_signature
 from backend.security.jwt_utils import verify_jwt
 from backend.security.model_integrity import load_hash_manifest
-from .safe_mode import SafeModeState
-from .metrics import PrometheusMiddleware
-from .logging_config import configure_json_logging, set_log_context
+from safe_mode import SafeModeState
+from metrics import PrometheusMiddleware
+from logging_config import configure_json_logging, set_log_context
 from backend.monitoring.drift import DriftMonitor, DRIFT_ALERTS
 
 configure_json_logging(service="ml-inference")
@@ -64,6 +64,15 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _to_dict(model_obj):
+    """Serialize Pydantic model compatibly across v1/v2."""
+    if hasattr(model_obj, "model_dump"):
+        return model_obj.model_dump()
+    if hasattr(model_obj, "dict"):
+        return model_obj.dict()
+    return model_obj
 
 
 if 'JWT_VALIDATIONS' not in globals():
@@ -171,8 +180,8 @@ class HybridInferenceService:
             item["name"]: item for item in self.performance.get("artifacts", []) if isinstance(item, dict)
         }
 
-        self.enable_jwt = _env_flag("ENABLE_JWT_AUTH", False)
-        self.enable_hmac = _env_flag("ENABLE_HMAC_SIGNING", False)
+        self.enable_jwt = _env_flag("ENABLE_JWT_AUTH", True)
+        self.enable_hmac = _env_flag("ENABLE_HMAC_SIGNING", True)
         self.allowed_skew = int(os.getenv("ALLOWED_SKEW_SECONDS", "120"))
         self.safe_mode_env = _env_flag("SAFE_MODE", False)
 
