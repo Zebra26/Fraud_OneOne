@@ -140,12 +140,56 @@ The project targets low-latency transaction scoring with layered ML, strong secu
   - `docker compose -f docker-compose.dev.yml -f docker-compose.observability.yml -f docker-compose.observability.dev.yml up -d prometheus alertmanager grafana loki promtail`
 - UIs
   - Backend: `http://localhost:8000` (admin metrics require JWT/HMAC)
-  - Inference: `http://localhost:8080`
-  - Kafka UI: `http://localhost:8080` (if enabled in your dev compose)
+  - Inference: `http://ml-inference:8080` (internal; not published to host by default)
+  - Kafka UI: `http://localhost:8080`
   - RedisInsight: `http://localhost:8001`
   - Prometheus: `http://localhost:9090`, Grafana: `http://localhost:3000`, Loki: `http://localhost:3100`
 - Observability validator
   - Set `JWT_SECRET_KEY`, `API_HMAC_KEY`, and run `python scripts/validate_observability.py`
+
+
+## Quickstart & Automation (Dev)
+
+- Bootstrap local venv and deps (Windows/PowerShell):
+  - `./scripts/bootstrap.ps1`
+- Start core services and wait for health:
+  - `./scripts/dev_up.ps1`
+- Stop services (optionally remove volumes):
+  - `./scripts/dev_down.ps1` (add `-CleanVolumes` to wipe volumes)
+
+
+## Synthetic Traffic & Stress Testing
+
+- Send a few synthetic requests (JWT + HMAC are generated for you):
+  - `python -m scripts.send_synthetic_scores --count 10 --sleep-ms 50`
+- Aggregate summary with PowerShell wrapper:
+  - `./scripts/send_scores.ps1 -Count 100 -DelayMs 100`
+- High-concurrency benchmark (with worker scaling and perf flags):
+  - `./scripts/stress_up.ps1 -Total 5000 -Concurrency 400`
+  - Parameters: `-BackendWorkers`, `-InferenceWorkers`, `-TimeoutSec`, `-NoBuild`
+  - Prints summary: Total/OK/ERRORS/elapsed/RPS, plus latency p50/p95/avg.
+
+
+## Performance Modes & Flags
+
+- Backend fast path (no network hop):
+  - `USE_LOCAL_INFERENCE=true` computes the score in backend using `AdvancedFraudModelService` (tabular model).
+- Benchmark mode (avoid storage overhead):
+  - `PERF_MODE=true` disables Mongo/Redis writes on the score path and relaxes security checks that require Redis (JTI, per-device limiter), keeping JWT+HMAC verification intact.
+- Workers:
+  - Backend: `USE_GUNICORN=true`, `GUNICORN_WORKERS`, `GUNICORN_TIMEOUT`.
+  - Inference: Uvicorn workers via `UVICORN_WORKERS` (see docker-compose.dev.yml overrides).
+
+
+## ONNX Acceleration (Inference)
+
+- Enable runtime acceleration:
+  - Set `USE_ONNXRUNTIME=true` in the `ml-inference` environment.
+- Supervised model export:
+  - If `/app/models/supervised.onnx` is missing, the service attempts an on-the-fly export from the loaded scikit-learn model using `skl2onnx`.
+  - Alternatively, provide `supervised.onnx` in the mounted models volume (`models_data:/app/models`).
+- Optional micro-batching:
+  - `INFER_ONNX_BATCH=true`, `INFER_BATCH_SIZE` (default 16), `INFER_BATCH_TIMEOUT_MS` (default 5) for batched ONNX calls.
 
 
 ## Production Considerations
