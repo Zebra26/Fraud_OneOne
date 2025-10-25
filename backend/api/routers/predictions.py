@@ -60,22 +60,29 @@ async def _call_inference(payload: dict, inference_url: str, request: Request) -
     corr = getattr(request.state, "correlation_id", None)
     if corr:
         headers["X-Correlation-ID"] = corr
-    timeout = httpx.Timeout(5.0, connect=2.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        try:
-            attempts = int(os.getenv("RETRY_ATTEMPTS", "2"))
-            async for attempt in AsyncRetrying(
-                stop=stop_after_attempt(max(1, attempts)),
-                wait=wait_exponential(multiplier=0.2, min=0.2, max=2.0),
-                retry=retry_if_exception_type(httpx.HTTPError),
-            ):
-                with attempt:
-                    response = await client.post(
-                        f"{inference_url}/infer", content=body_bytes, headers=headers
-                    )
-        except httpx.HTTPError as exc:  # pragma: no cover - network
-            CIRCUIT_BREAKER.record_failure()
-            raise HTTPException(status_code=502, detail=f"Inference service unreachable: {exc}")
+    client = getattr(request.app.state, "http_client", None)
+    owns_client = False
+    if client is None:
+        # Fallback if startup client not available
+        client = httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0))
+        owns_client = True
+    try:
+        attempts = int(os.getenv("RETRY_ATTEMPTS", "2"))
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(max(1, attempts)),
+            wait=wait_exponential(multiplier=0.2, min=0.2, max=2.0),
+            retry=retry_if_exception_type(httpx.HTTPError),
+        ):
+            with attempt:
+                response = await client.post(
+                    f"{inference_url}/infer", content=body_bytes, headers=headers
+                )
+    except httpx.HTTPError as exc:  # pragma: no cover - network
+        CIRCUIT_BREAKER.record_failure()
+        raise HTTPException(status_code=502, detail=f"Inference service unreachable: {exc}")
+    finally:
+        if owns_client:
+            await client.aclose()
     if response.status_code != 200:
         CIRCUIT_BREAKER.record_failure()
         raise HTTPException(status_code=response.status_code, detail=response.text)
@@ -93,6 +100,9 @@ async def score_transaction(
     redis_cache=Depends(get_redis_cache),
     redis_writer=Depends(get_redis_batch_writer),
 ):
+    perf_mode = os.getenv("PERF_MODE", "false").strip().lower() in {"1", "true", "yes"}
+    use_local = os.getenv("USE_LOCAL_INFERENCE", "false").strip().lower() in {"1", "true", "yes"}
+
     inference_payload = {
         "transaction_id": payload.transaction_id,
         "account_id": payload.account_id,
@@ -102,35 +112,47 @@ async def score_transaction(
         "channel": payload.channel,
     }
 
-    inference_url = os.getenv("INFERENCE_URL", "http://ml-inference:8080")
-    # Call inference with circuit breaker and timeout; fall back on failure
-    try:
-        result = await _call_inference(inference_payload, inference_url, request)
-    except HTTPException:
-        # Graceful degradation: compute a light heuristic and enqueue for offline processing
-        result = _light_score(payload)
-        DEGRADED_DECISIONS.inc()
+    if use_local:
+        service = get_model_service()
+        prob = float(service.predict_proba(inference_payload["features"]))
+        decision = "FRAUD" if prob >= service.thresholds.get("block", 0.85) else "NORMAL"
+        result = {
+            "score": prob,
+            "breakdown": {"tabular": prob, "graph": 0.0, "autoencoder": 0.0, "lstm": 0.0},
+            "decision": decision,
+            "threshold": service.thresholds.get("block", 0.85),
+        }
+    else:
+        inference_url = os.getenv("INFERENCE_URL", "http://ml-inference:8080")
+        # Call inference with circuit breaker and timeout; fall back on failure
         try:
-            from ..dependencies import get_kafka_producer
+            result = await _call_inference(inference_payload, inference_url, request)
+        except HTTPException:
+            # Graceful degradation: compute a light heuristic and enqueue for offline processing
+            result = _light_score(payload)
+            DEGRADED_DECISIONS.inc()
+            if not perf_mode:
+                try:
+                    from ..dependencies import get_kafka_producer
 
-            producer = get_kafka_producer()
-            deferred_topic = os.getenv("DEFERRED_TOPIC", os.getenv("KAFKA_TOPIC_PREDICTIONS", "predictions") + ".deferred")
-            producer.send_transaction(
-                deferred_topic,
-                {
-                    "type": "deferred_prediction",
-                    "transaction_id": payload.transaction_id,
-                    "account_id": payload.account_id,
-                    "features": payload.features.model_dump(),
-                    "graph": inference_payload["graph"],
-                    "sequence": payload.sequence,
-                    "channel": payload.channel,
-                    "timestamp": datetime.utcnow().isoformat(),
-                },
-            )
-            DEFERRED_PREDICTIONS.inc()
-        except Exception:
-            pass
+                    producer = get_kafka_producer()
+                    deferred_topic = os.getenv("DEFERRED_TOPIC", os.getenv("KAFKA_TOPIC_PREDICTIONS", "predictions") + ".deferred")
+                    producer.send_transaction(
+                        deferred_topic,
+                        {
+                            "type": "deferred_prediction",
+                            "transaction_id": payload.transaction_id,
+                            "account_id": payload.account_id,
+                            "features": payload.features.model_dump(),
+                            "graph": inference_payload["graph"],
+                            "sequence": payload.sequence,
+                            "channel": payload.channel,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        },
+                    )
+                    DEFERRED_PREDICTIONS.inc()
+                except Exception:
+                    pass
 
     fraud_probability = float(result.get("score", 0.0))
     decision = result.get("decision", "NORMAL")
@@ -177,17 +199,18 @@ async def score_transaction(
             "sequence": payload.sequence,
         }
     )
-    try:
-        # enqueue in Redis pipeline
-        await redis_writer.enqueue_set(feature_key, feature_val, ttl_seconds=3600)
-        await redis_writer.enqueue_set(f"risk:{payload.transaction_id}", fraud_probability, ttl_seconds=600)
-        REDIS_OPS.labels(operation="enqueue_feature_vector").inc()
-        REDIS_OPS.labels(operation="enqueue_risk_score").inc()
-    except Exception:
-        # fallback to direct writes
-        await redis_cache.set_feature_vector(feature_key, feature_val)
-        await redis_cache.set_risk_score(payload.transaction_id, fraud_probability)
-        REDIS_OPS.labels(operation="fallback_set").inc()
+    if not perf_mode:
+        try:
+            # enqueue in Redis pipeline
+            await redis_writer.enqueue_set(feature_key, feature_val, ttl_seconds=3600)
+            await redis_writer.enqueue_set(f"risk:{payload.transaction_id}", fraud_probability, ttl_seconds=600)
+            REDIS_OPS.labels(operation="enqueue_feature_vector").inc()
+            REDIS_OPS.labels(operation="enqueue_risk_score").inc()
+        except Exception:
+            # fallback to direct writes
+            await redis_cache.set_feature_vector(feature_key, feature_val)
+            await redis_cache.set_risk_score(payload.transaction_id, fraud_probability)
+            REDIS_OPS.labels(operation="fallback_set").inc()
 
     # Micro-batch enqueue (non-blocking if configured)
     is_fraud = decision == "FRAUD"
@@ -214,11 +237,12 @@ async def score_transaction(
         "device_enc": device_enc,
         "geolocation_enc": geo_enc,
     }
-    try:
-        await writer.enqueue(doc)
-    except Exception:
-        # fallback to direct write on failure
-        await mongo.insert_explanation(doc)
+    if not perf_mode:
+        try:
+            await writer.enqueue(doc)
+        except Exception:
+            # fallback to direct write on failure
+            await mongo.insert_explanation(doc)
 
     logger.info(
         "Prediction computed",

@@ -1,12 +1,17 @@
 fastapi==0.110.0
-uvicorn[standard]==0.27.0
-uvloop==0.19.0
+# Use uvicorn standard extras (uvloop, httptools) only on non-Windows
+uvicorn[standard]==0.27.0 ; platform_system != "Windows"
+# Plain uvicorn on Windows
+uvicorn==0.27.0 ; platform_system == "Windows"
+# uvloop not supported on Windows
+uvloop==0.19.0 ; platform_system != "Windows"
 pydantic>=2,<3
 pydantic-settings>=2,<3
 python-dotenv==1.0.1
 motor==3.5.1
 pymongo==4.6.3
-onnxruntime==1.17.1
+# onnxruntime used by inference service; skip on Windows for local dev
+onnxruntime==1.17.1 ; platform_system != "Windows"
 prometheus-client==0.20.0
 redis==5.0.1
 kafka-python==2.0.2

@@ -2,6 +2,8 @@ import os
 import json
 import time
 import uuid
+import argparse
+import sys
 import numpy as np
 import requests
 
@@ -75,20 +77,53 @@ def sign_headers(body_bytes: bytes) -> dict:
     return headers
 
 
-def send_one(i: int) -> None:
+def send_one(i: int) -> dict:
     payload = make_payload(i)
     body_bytes = json.dumps(payload).encode("utf-8")
     headers = sign_headers(body_bytes)
     url = f"{API_URL}{PATH}"
     r = requests.post(url, data=body_bytes, headers=headers, timeout=20)
-    print(f"[{i}] Status: {r.status_code} | {r.text[:300]}")
+    result = {
+        "index": i,
+        "status": r.status_code,
+        "text": r.text,
+    }
+    try:
+        j = r.json()
+        result.update(
+            {
+                "transaction_id": j.get("transaction_id"),
+                "decision": j.get("decision"),
+                "fraud_probability": j.get("fraud_probability"),
+            }
+        )
+    except Exception:
+        pass
+    return result
 
 
 if __name__ == "__main__":
-    np.random.seed(42)
-    for i in range(3):
-        try:
-            send_one(i)
-        except Exception as e:
-            print(f"[{i}] Error: {e}")
+    parser = argparse.ArgumentParser(description="Send synthetic scores to backend")
+    parser.add_argument("--count", type=int, default=3, help="Number of transactions to send")
+    parser.add_argument("--sleep-ms", type=int, default=0, help="Delay between sends in milliseconds")
+    parser.add_argument("--machine", action="store_true", help="Print one JSON line per result for scripts")
+    args = parser.parse_args()
 
+    np.random.seed(42)
+    delay_sec = max(0, args.sleep_ms) / 1000.0
+    for i in range(args.count):
+        try:
+            res = send_one(i)
+            if args.machine:
+                print(json.dumps(res, ensure_ascii=False))
+            else:
+                status = res.get("status")
+                text = (res.get("text") or "")[:300]
+                print(f"[{i}] Status: {status} | {text}")
+        except Exception as e:
+            if args.machine:
+                print(json.dumps({"index": i, "status": 0, "error": str(e)}))
+            else:
+                print(f"[{i}] Error: {e}")
+        if delay_sec:
+            time.sleep(delay_sec)

@@ -93,3 +93,18 @@ async def get_model_info():
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     return response.json()
+
+
+@app.on_event("startup")
+async def _init_http_client():
+    # Shared HTTP client for upstream calls (keep-alive)
+    limits = httpx.Limits(max_connections=200, max_keepalive_connections=100)
+    timeout = httpx.Timeout(5.0, connect=2.0)
+    app.state.http_client = httpx.AsyncClient(limits=limits, timeout=timeout)
+
+
+@app.on_event("shutdown")
+async def _close_http_client():
+    client = getattr(app.state, "http_client", None)
+    if client is not None:
+        await client.aclose()

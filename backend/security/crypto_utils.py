@@ -19,18 +19,37 @@ _NONCE_SIZE = 12  # 96-bit nonce for AES-GCM
 _PII_TOKEN_ENV = "PII_TOKEN_KEY"
 
 
+def _is_hex(s: str) -> bool:
+    if len(s) % 2 != 0:
+        return False
+    hexdigits = set("0123456789abcdefABCDEF")
+    return all(ch in hexdigits for ch in s)
+
+
 def _decode_env_key(raw_key: str) -> bytes:
-    """Decode a base64 or hex encoded key."""
-    try:
-        key = base64.b64decode(raw_key, validate=True)
-    except Exception:
+    """Decode a hex (preferred) or base64-encoded key to 32 bytes.
+
+    We prefer hex first to avoid misinterpreting valid hex as base64 when the
+    string happens to be a valid base64 alphabet and length.
+    """
+    s = (raw_key or "").strip()
+    # Try hex first
+    if _is_hex(s):
         try:
-            key = bytes.fromhex(raw_key)
-        except ValueError as exc:  # pragma: no cover - defensive
-            raise ValueError("MODELS_AES_KEY must be base64 or hex encoded") from exc
-    if len(key) != 32:
-        raise ValueError("MODELS_AES_KEY must decode to 32 bytes (AES-256 key length)")
-    return key
+            key = bytes.fromhex(s)
+            if len(key) != 32:
+                raise ValueError
+            return key
+        except Exception:
+            pass
+    # Fallback to strict base64
+    try:
+        key = base64.b64decode(s, validate=True)
+        if len(key) != 32:
+            raise ValueError
+        return key
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValueError("Key must be base64 or hex encoded to 32 bytes (AES-256)") from exc
 
 
 def get_aes_key() -> bytes:

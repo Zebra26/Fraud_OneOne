@@ -713,6 +713,21 @@ if USE_ONNX:
         import onnxruntime as ort
 
         sup_path = Path(SERVICE.model_dir) / "supervised.onnx"
+        if not sup_path.exists():
+            try:
+                from skl2onnx import convert_sklearn
+                from skl2onnx.common.data_types import FloatTensorType
+                model = getattr(SERVICE, 'tabular_model', None)
+                feat_names = getattr(SERVICE, 'feature_names', [])
+                n_features = len(feat_names) if feat_names else None
+                if model is not None and n_features and n_features > 0:
+                    initial_type = [('input', FloatTensorType([None, n_features]))]
+                    onx = convert_sklearn(model, initial_types=initial_type)
+                    sup_path.parent.mkdir(parents=True, exist_ok=True)
+                    sup_path.write_bytes(onx.SerializeToString())
+                    logger.info("Exported supervised model to ONNX", extra={"path": str(sup_path), "n_features": n_features})
+            except Exception as _exc:
+                logger.warning("Failed to export ONNX: %s", _exc)
         if sup_path.exists():
             ONNX_SUPERVISED = ort.InferenceSession(str(sup_path))
             ONNX_INPUT_NAME = ONNX_SUPERVISED.get_inputs()[0].name  # type: ignore[attr-defined]

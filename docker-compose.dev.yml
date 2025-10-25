@@ -8,6 +8,18 @@ services:
       MONGO_URI: mongodb://mongo:27017/fraud_db
       MONGO_DB: fraud_db
       MONGO_SSL: "false"
+      # Dev PII tokenization and AES-256 encryption keys (hex-encoded 32 bytes)
+      PII_TOKEN_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      MODELS_AES_KEY: 8899aabbccddeeff00112233445566778899aabbccddeeff0011223344556677
+      # Relax rate limits for stress tests
+      RATE_LIMIT_CAPACITY: "20000"
+      RATE_LIMIT_REFILL_PER_MIN: "20000"
+      PERF_MODE: ${PERF_MODE:-false}
+      USE_LOCAL_INFERENCE: ${USE_LOCAL_INFERENCE:-false}
+      # Enable multi-worker via gunicorn in dev; overridable by env
+      USE_GUNICORN: ${USE_GUNICORN:-true}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-8}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-30}
       # Updated to 6-node Redis Cluster (3 masters + 3 replicas)
       REDIS_CLUSTER_NODES: "redis-node-0:6379,redis-node-1:6379,redis-node-2:6379,redis-node-3:6379,redis-node-4:6379,redis-node-5:6379"
       REDIS_USE_SSL: "false"
@@ -168,6 +180,8 @@ services:
       - ENABLE_TLS=false
       - JWT_SECRET_KEY=dGVzdC1zZWNyZXQ=
       - API_HMAC_KEY=aG1hYy1zZWNyZXQ=
+      - USE_ONNXRUNTIME=true
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-8}
     depends_on:
       - kafka
       - redis-cluster-init
@@ -180,6 +194,9 @@ services:
       - ./security/certs:/app/security/certs:ro
     labels:
       service: ml-inference
+    # Override command to allow multiple workers; keep TLS branch
+    command: >-
+      bash -lc 'if [ "$ENABLE_TLS" = "true" ]; then uvicorn app:app --host 0.0.0.0 --port 8444 --ssl-certfile $TLS_CERT_PATH --ssl-keyfile $TLS_KEY_PATH --workers ${UVICORN_WORKERS:-8}; else uvicorn app:app --host 0.0.0.0 --port 8080 --workers ${UVICORN_WORKERS:-8}; fi'
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest

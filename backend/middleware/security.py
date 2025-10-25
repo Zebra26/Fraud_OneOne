@@ -44,6 +44,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.refill_per_min = int(os.getenv("RATE_LIMIT_REFILL_PER_MIN", "50"))
         self.allowed_skew = int(os.getenv("ALLOWED_SKEW_SECONDS", "60"))
         self.require_jti = os.getenv("JWT_REQUIRE_JTI", "false").strip().lower() in {"1", "true", "yes"}
+        self.perf_mode = os.getenv("PERF_MODE", "false").strip().lower() in {"1", "true", "yes"}
+        if self.perf_mode:
+            # In perf mode, disable JTI replay checks to save Redis calls
+            self.require_jti = False
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
         start = time.perf_counter()
@@ -111,21 +115,40 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         # Idempotency-Key validation and device binding
         if method == "POST" and path == "/predictions/score":
-            idemp = request.headers.get("Idempotency-Key")
-            if not idemp:
-                return JSONResponse({"detail": "Missing Idempotency-Key"}, status_code=400)
-            if not self.redis.set(f"idemp:{idemp}", "1", ex=600, nx=True):
-                return JSONResponse({"detail": "Duplicate request"}, status_code=409)
-            device_id = request.headers.get("X-Device-ID")
-            if not device_id or not device_id.isalnum():
-                return JSONResponse({"detail": "Invalid or missing X-Device-ID"}, status_code=400)
-            # Device binding rate limit by (user_id, device_id, ip_cidr)
-            user_id = str(claims.get("sub", "anon"))
-            ip = request.client.host if request.client else "0.0.0.0"
-            ip_cidr = ".".join(ip.split(".")[:3]) + ".0/24" if "." in ip else ip
-            bucket_key = f"ratelimit_dev:{user_id}:{device_id}:{ip_cidr}"
-            now = time.time()
-            bucket = self.redis.get(bucket_key)
+            if not self.perf_mode:
+                idemp = request.headers.get("Idempotency-Key")
+                if not idemp:
+                    return JSONResponse({"detail": "Missing Idempotency-Key"}, status_code=400)
+                device_id = request.headers.get("X-Device-ID")
+                if not device_id or not device_id.isalnum():
+                    return JSONResponse({"detail": "Invalid or missing X-Device-ID"}, status_code=400)
+                # Device binding rate limit by (user_id, device_id, ip_cidr)
+                user_id = str(claims.get("sub", "anon"))
+                ip = request.client.host if request.client else "0.0.0.0"
+                ip_cidr = ".".join(ip.split(".")[:3]) + ".0/24" if "." in ip else ip
+                bucket_key = f"ratelimit_dev:{user_id}:{device_id}:{ip_cidr}"
+                now = time.time()
+                if not self.redis.set(f"idemp:{idemp}", "1", ex=600, nx=True):
+                    return JSONResponse({"detail": "Duplicate request"}, status_code=409)
+                bucket = self.redis.get(bucket_key)
+                if bucket is None:
+                    tokens = self.capacity - 1
+                else:
+                    tokens, timestamp_str = bucket.split(":")
+                    tokens = int(tokens)
+                    last = float(timestamp_str)
+                    refill = int((now - last) / 60 * self.refill_per_min)
+                    tokens = min(self.capacity, tokens + refill) - 1
+                if tokens < 0:
+                    RATE_LIMIT_BLOCK.inc()
+                    return JSONResponse({"detail": "Device rate limit exceeded"}, status_code=429)
+                self.redis.set(bucket_key, f"{tokens}:{now}")
+
+        # Rate limiting
+        key = f"rate_limit:{token}"
+        now = time.time()
+        if not self.perf_mode:
+            bucket = self.redis.get(key)
             if bucket is None:
                 tokens = self.capacity - 1
             else:
@@ -136,25 +159,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 tokens = min(self.capacity, tokens + refill) - 1
             if tokens < 0:
                 RATE_LIMIT_BLOCK.inc()
-                return JSONResponse({"detail": "Device rate limit exceeded"}, status_code=429)
-            self.redis.set(bucket_key, f"{tokens}:{now}")
-
-        # Rate limiting
-        key = f"rate_limit:{token}"
-        now = time.time()
-        bucket = self.redis.get(key)
-        if bucket is None:
-            tokens = self.capacity - 1
-        else:
-            tokens, timestamp_str = bucket.split(":")
-            tokens = int(tokens)
-            last = float(timestamp_str)
-            refill = int((now - last) / 60 * self.refill_per_min)
-            tokens = min(self.capacity, tokens + refill) - 1
-        if tokens < 0:
-            RATE_LIMIT_BLOCK.inc()
-            return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
-        self.redis.set(key, f"{tokens}:{now}")
+                return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+            self.redis.set(key, f"{tokens}:{now}")
 
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start) * 1000
